@@ -8,7 +8,7 @@ class Radio:
     __max_volume: int = 100
     __volume_step: int = 5
 
-    __vlc_instance: vlc.Instance = vlc.Instance()
+    __vlc_instance: vlc.Instance = vlc.Instance("--aout=alsa")
 
     def __init__(self):
         self.__vlc_instance.log_unset() # disable VLC console output
