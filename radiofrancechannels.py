@@ -140,21 +140,28 @@ class RadioFranceChannel(RadioChannel):
                 or (time.time() > self.time_to_refresh + 5)
                 or force): # Account for 5s of streaming delay
             api_url = self.__api_url.format(self.__RF_channel_id)
-            response = requests.get(api_url, timeout=1.0) # 1s timeout
-            if not response.ok:
-                print(f"Error fetching metadata: {response.reason}")
-                return
+
+            try:
+                response = requests.get(api_url, timeout=1.0) # 1s timeout
+            except Exception as e:
+                print(e)
+
+            if response:
+                if not response.ok:
+                    print(f"{time.ctime(time.time())} : Error fetching metadata: {response.reason}")
+                else:
+                    metadata = response.json()
+                    self.last_metadata_refresh = time.time()
+                    self.time_to_refresh = metadata['now']['endTime']
+                    if not self.time_to_refresh: # Set next refresh at track end time
+                        self.time_to_refresh = time.time()
+                    self.name = metadata['prev'][0]['firstLine'] # metadata['prev'] is a list! # Station name
+                    self.global_program = metadata['prev'][0]['secondLine']  # metadata['prev'] is a list! # Global program name
+                    self.program_name = metadata['now']['firstLine'] # metadata['now'] is a dict!! # Program name
+                    self.track_name = metadata['now']['secondLine'] # Music name or Podcast Title
+                    self.artist_name = metadata['now']['thirdLine'] # Artist name or None
             else:
-                metadata = response.json()
-                self.last_metadata_refresh = time.time()
-                self.time_to_refresh = metadata['now']['endTime']
-                if not self.time_to_refresh: # Set next refresh at track end time
-                    self.time_to_refresh = time.time()
-                self.name = metadata['prev'][0]['firstLine'] # metadata['prev'] is a list! # Station name
-                self.global_program = metadata['prev'][0]['secondLine']  # metadata['prev'] is a list! # Global program name
-                self.program_name = metadata['now']['firstLine'] # metadata['now'] is a dict!! # Program name
-                self.track_name = metadata['now']['secondLine'] # Music name or Podcast Title
-                self.artist_name = metadata['now']['thirdLine'] # Artist name or None
+                print(f"{time.ctime(time.time())} : Exception getting metadata")
 
     def get_debug(self) -> str:
         return ("Last refresh : " + time.ctime(self.last_metadata_refresh) +
