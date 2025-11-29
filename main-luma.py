@@ -173,9 +173,9 @@ class PiWebRadioApp():
                 self.is_mute = False
 
     def signal_handler(self, signal, frame):
+        self.radio.stop()
         loop = asyncio.get_event_loop()
         loop.stop()
-        self.radio.stop()
         self.oled.show()
         self.display_splash(os.path.join(self.__script_dir_name, "zzz.bmp"))
         self.scroll_right(self.splash_virtual, (0,0))
@@ -312,11 +312,21 @@ class PiWebRadioApp():
             await asyncio.sleep(60)
 
     async def run(self):
-        await asyncio.gather(
-            self.refresh_display_data(),
-            self.main_display(),
-            self.power_monitor()
-        )
+        try:
+            await asyncio.gather(
+                self.refresh_display_data(),
+                self.main_display(),
+                self.power_monitor()
+            )
+        except (SystemExit, KeyboardInterrupt):
+            # cancel current task
+            asyncio.current_task().cancel()
+
+            # give time to other tasks to run (including me)
+            await asyncio.sleep(0)
+            raise
+        except:
+            raise
 
 #
 # Main loop
@@ -325,7 +335,7 @@ if __name__ == "__main__":
     try:
         app = PiWebRadioApp()
         asyncio.run(app.run())
-    except KeyboardInterrupt:
+    except (SystemExit, KeyboardInterrupt):
         pass
 
 
