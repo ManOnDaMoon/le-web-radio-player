@@ -9,18 +9,27 @@ class Radio:
     __volume_step: int = 5
 
     __vlc_instance: vlc.Instance = vlc.Instance("--aout=alsa")
+    # "--aout=alsa" parameter to suppress PulseAudio error: "PulseAudio server connection failure: Connection refused"
+    #TODO : Add "-q" to stop logging warnings?
 
-    def __init__(self):
-        self.__vlc_instance.log_unset() # disable VLC console output
+    def __init__(self, debug: bool = False):
+        if not debug: self.__vlc_instance.log_unset() # disable VLC console output
         self.power = False
         self.volume = self.__default_volume
         self.channels = radiofrancechannels.get_radiofrance_channels()
         self.channel_num = 0
         self.media_player = self.__vlc_instance.media_player_new()
+        if debug:
+            self.media_player.event_manager().event_attach(
+                vlc.EventType.MediaPlayerEncounteredError,
+                self.callback_from_player, "media_player")
         self.current_channel = None
         self.display_text = None
         self.media = None
         self.set_display("OFF")
+
+    def callback_from_player(self, event: vlc.Event, *args):
+        self.set_display(f"callback called: {event.type}, from {args[0]}")
 
     def toggle_on_off(self):
         if not self.power:
@@ -99,7 +108,7 @@ class Radio:
 
     def get_display(self) -> str:
         if not self.power:
-            return "OFF"
+            return ""
         if self.media_player.get_state() == vlc.State.Ended or self.media_player.get_state() == vlc.State.Error:
             return f"{self.display_text} - /!\\ Error playing stream"
         else:

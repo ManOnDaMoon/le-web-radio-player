@@ -17,7 +17,18 @@ __default_channels = [
         ['FIP Hip Hop', 'https://stream.radiofrance.fr/fiphiphop/fiphiphop.m3u8?id=radiofranceBose', 95],
         ['FIP Sacré Français', 'https://stream.radiofrance.fr/fipsacrefrancais/fipsacrefrancais.m3u8?id=radiofranceBose', 96],
         ['France Inter', 'https://stream.radiofrance.fr/franceinter/franceinter.m3u8?id=radiofranceBose', 1],
-        ['Musique d\'Inter', 'https://stream.radiofrance.fr/franceinterlamusiqueinter/franceinterlamusiqueinter.m3u8?id=radiofranceBose', 1101]
+        ['Musique d\'Inter', 'https://stream.radiofrance.fr/franceinterlamusiqueinter/franceinterlamusiqueinter.m3u8?id=radiofranceBose', 1101],
+        ['France Musique', 'https://stream.radiofrance.fr/francemusique/francemusique.m3u8?id=radiofranceBose', 4],
+        ['France Musique Classique Easy', 'https://stream.radiofrance.fr/francemusiqueeasyclassique/francemusiqueeasyclassique.m3u8?id=radiofranceBose', 401],
+        ['France Musique Classique Plus', 'https://stream.radiofrance.fr/francemusiqueclassiqueplus/francemusiqueclassiqueplus.m3u8?id=radiofranceBose', 402],
+        ['France Musique Concerts RadioFrance', 'https://stream.radiofrance.fr/francemusiqueconcertsradiofrance/francemusiqueconcertsradiofrance.m3u8?id=radiofranceBose', 403],
+        ['France Musique Ocora Musiques du Monde', 'https://stream.radiofrance.fr/francemusiqueocoramonde/francemusiqueocoramonde.m3u8?id=radiofranceBose', 404],
+        ['France Musique La Jazz', 'https://stream.radiofrance.fr/francemusiquelajazz/francemusiquelajazz.m3u8?id=radiofranceBose', 405],
+        ['France Musique La Contemporaine', 'https://stream.radiofrance.fr/francemusiquelacontemporaine/francemusiquelacontemporaine.m3u8?id=radiofranceBose', 406],
+        ['France Musique La BO', 'https://stream.radiofrance.fr/francemusiquelabo/francemusiquelabo.m3u8?id=radiofranceBose', 407],
+        ['France Musique La Baroque', 'https://stream.radiofrance.fr/francemusiquebaroque/francemusiquebaroque.m3u8?id=radiofranceBose', 408],
+        ['France Musique Opera', 'https://stream.radiofrance.fr/francemusiqueopera/francemusiqueopera.m3u8?id=radiofranceBose', 409],
+        ['France Musique Piano Zen', 'https://stream.radiofrance.fr/francemusiquepianozen/francemusiquepianozen.m3u8?id=radiofranceBose', 410]
     ]
 
 class RadioFranceChannel(RadioChannel):
@@ -129,18 +140,19 @@ class RadioFranceChannel(RadioChannel):
     def get_display_text(self) -> str:
         self.fetch_metadata()
         infos = self.get_current_track_info()
-        if infos['name'] == infos['program_name']:
+        infos.pop('global_program')
+        if (infos['name'] == infos['program_name']) :
             infos.pop('program_name')
         infos.pop('name')
         infos = {k: v for k, v in infos.items() if v is not None}
-        return "\n".join(infos.values())
+        return " | ".join(infos.values())
 
     def fetch_metadata(self, force: bool = False):
         if ((time.time() > self.last_metadata_refresh + 60) # Account for 1 minute max from last refresh
                 or (time.time() > self.time_to_refresh + 5)
                 or force): # Account for 5s of streaming delay
             api_url = self.__api_url.format(self.__RF_channel_id)
-
+            response = None
             try:
                 response = requests.get(api_url, timeout=1.0) # 1s timeout
             except Exception as e:
@@ -165,8 +177,8 @@ class RadioFranceChannel(RadioChannel):
 
     def get_debug(self) -> str:
         return ("Last refresh : " + time.ctime(self.last_metadata_refresh) +
-                "\nNext refresh : " + time.ctime(self.last_metadata_refresh + 60) +
-                "\nNext program : " + time.ctime(self.time_to_refresh))
+                " | Next refresh : " + time.ctime(self.last_metadata_refresh + 60) +
+                " | Next program : " + time.ctime(self.time_to_refresh))
 
 #
 # Generate an array of RadioFrance channels
