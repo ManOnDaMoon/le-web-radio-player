@@ -46,8 +46,8 @@ class PiWebRadioApp():
         self.title_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "Louis George Cafe.ttf"), 26)
         self.text_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "Louis George Cafe.ttf"), 16)
         self.icons_y_position = 0
-        self.title_y_position = 18
-        self.text_y_position = 46
+        self.title_y_position = 16
+        self.text_y_position = 42
 
         Button.was_held = False
 
@@ -77,7 +77,7 @@ class PiWebRadioApp():
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGHUP, self.signal_handler)
 
-        self.wait_for_internet_connection()
+        self.wait_for_internet_connection() #TODO: Replace with  an Offline Mode detection
 
         self.scroll_right(self.splash_virtual, (0,0))
 
@@ -225,6 +225,8 @@ class PiWebRadioApp():
         return icontext
 
     async def main_display(self):
+        #TODO: Introduire un self.mode pour différencier les fonctionnalités : offline, radio, réveil, bluetooth, podcasts...
+        #TODO: Définir une arborescence de menu pour les différentes fonctionnalités
         self.redraw = True
         x3=128
         while True:
