@@ -16,6 +16,7 @@ __default_channels = [
         ['FIP Pop', 'https://stream.radiofrance.fr/fippop/fippop.m3u8?id=radiofranceBose', 78],
         ['FIP Hip Hop', 'https://stream.radiofrance.fr/fiphiphop/fiphiphop.m3u8?id=radiofranceBose', 95],
         ['FIP Sacré Français', 'https://stream.radiofrance.fr/fipsacrefrancais/fipsacrefrancais.m3u8?id=radiofranceBose', 96],
+        ['FIP Cultes', 'https://stream.radiofrance.fr/fipcultes/fipcultes.m3u8?id=radiofranceBose', 709],
         ['France Inter', 'https://stream.radiofrance.fr/franceinter/franceinter.m3u8?id=radiofranceBose', 1],
         ['Musique d\'Inter', 'https://stream.radiofrance.fr/franceinterlamusiqueinter/franceinterlamusiqueinter.m3u8?id=radiofranceBose', 1101],
         ['France Musique', 'https://stream.radiofrance.fr/francemusique/francemusique.m3u8?id=radiofranceBose', 4],
