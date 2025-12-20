@@ -20,6 +20,8 @@ class PiWebRadioApp():
     __debug = False
     __display_refresh_rate: int = 2  # in seconds
     __last_display_refresh: float = 0.0
+    __off_time_limit: int = 15*60 # in seconds
+    __off_time: float = 0
 
     def __init__(self):
         # IO INIT
@@ -63,6 +65,7 @@ class PiWebRadioApp():
         self.mute_switch.when_pressed = self.mute
         self.volume_knob.when_rotated_clockwise = self.volume_up
         self.volume_knob.when_rotated_counter_clockwise = self.volume_down
+        #TODO: Maintenir le bouton volume pour switcher de mode
 
         # Sélecteur station
         self.on_off_switch.when_released = self.on_off_released
@@ -80,6 +83,7 @@ class PiWebRadioApp():
         self.wait_for_internet_connection() #TODO: Replace with  an Offline Mode detection
 
         self.scroll_right(self.splash_virtual, (0,0))
+        self.__off_time = time.time()
 
     def wait_for_internet_connection(self):
         while True:
@@ -132,6 +136,8 @@ class PiWebRadioApp():
         else:
             self.power = False
             self.clock = True
+            self.__off_time = time.time()
+            print(f"Off time: {time.ctime(self.__off_time)}")
 
     def total_shutdown(self, button):
         button.was_held = True
@@ -198,6 +204,11 @@ class PiWebRadioApp():
                     self.__last_display_refresh = time.time()
                     if (old_main_text != self.main_text) or (old_secondary_text != self.secondary_text):
                         self.redraw = True
+            else:
+                if time.time() > self.__off_time + self.__off_time_limit:
+                    print(f"Time: {time.ctime(time.time())}")
+                    print(f"Off time limit: {time.ctime(self.__off_time + self.__off_time_limit)}")
+                    os.system("sudo shutdown -h now")
             await asyncio.sleep(self.__display_refresh_rate)
 
     def get_volume_text(self) -> str:
