@@ -1,24 +1,25 @@
 
 import os
-import sys, time, signal
-import asyncio
+import time, signal
 from gpiozero import Button, RotaryEncoder
 import requests
+import threading
+from flask import Flask, request, abort
 
 from luma.core.interface.serial import i2c
 from luma.core.render import canvas
 from luma.oled.device import ssd1306
-import luma.core.legacy
 from luma.core.virtual import viewport
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageFont
 
 from radio import Radio
 
 class PiWebRadioApp():
 
-    __debug = False
-    __display_refresh_rate: int = 2  # in seconds
+    __debug = True
+    __data_refresh_rate: int = 2  # in seconds
+    __display_refresh_rate: float = 0.5
     __last_display_refresh: float = 0.0
     __off_time_limit: int = 15*60 # in seconds
     __off_time: float = 0
@@ -40,6 +41,7 @@ class PiWebRadioApp():
         self.scroll_l_count = 0
         self.is_mute = False
         self.power = False
+        self.doing_shutdown = False
         self.power_alert = 0
         self.clock = True
         self.redraw = True
@@ -69,21 +71,22 @@ class PiWebRadioApp():
 
         # Sélecteur station
         self.on_off_switch.when_released = self.on_off_released
-        #self.on_off_switch.when_pressed = self.toggle_on_off
         self.on_off_switch.when_held = self.total_shutdown
         self.channel_knob.when_rotated_clockwise = self.next_radio
         self.channel_knob.when_rotated_counter_clockwise = self.previous_radio
-        #self.channel_knob.when_rotated = self.change
 
         # Gestion de l'arrêt forcé
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGHUP, self.signal_handler)
 
-        self.wait_for_internet_connection() #TODO: Replace with  an Offline Mode detection
+        self.wait_for_internet_connection() #TODO: Replace with an Offline Mode detection
 
         self.scroll_right(self.splash_virtual, (0,0))
         self.__off_time = time.time()
+
+        # Initialisation API
+        self.api = Flask(__name__)
 
     def wait_for_internet_connection(self):
         while True:
@@ -91,6 +94,7 @@ class PiWebRadioApp():
                 res = requests.get("https://www.radiofrance.fr")
                 if res.status_code == 200:
                     return
+
                 time.sleep(1)
             except:
                 pass
@@ -137,7 +141,6 @@ class PiWebRadioApp():
             self.power = False
             self.clock = True
             self.__off_time = time.time()
-            print(f"Off time: {time.ctime(self.__off_time)}")
 
     def total_shutdown(self, button):
         button.was_held = True
@@ -146,6 +149,11 @@ class PiWebRadioApp():
         self.clock = False
         self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"))
         self.oled.hide()
+        self.doing_shutdown = True
+        self.metadataThread.join()
+        self.displayThread.join()
+        self.dataThread.join()
+        print(f"{time.ctime(time.time())} : Extinction totale par bouton physique")
         os.system("sudo shutdown -h now")
 
     def volume_up(self, rotary_encoder: RotaryEncoder):
@@ -160,7 +168,7 @@ class PiWebRadioApp():
         if self.scroll_r_count >= 3:
             self.scroll_r_count = 0
             if self.radio.next_channel():
-                self.show_text(">>", "")
+                self.show_text(">>", "Chargement")
 
     def previous_radio(self, rotary_encoder: RotaryEncoder):
         self.scroll_l_count += 1
@@ -168,7 +176,7 @@ class PiWebRadioApp():
         if self.scroll_l_count >= 3:
             self.scroll_l_count = 0
             if self.radio.previous_channel():
-                self.show_text("<<", "")
+                self.show_text("<<", "Chargement")
 
     def mute(self):
         new_volume = self.radio.mute()
@@ -179,37 +187,49 @@ class PiWebRadioApp():
                 self.is_mute = False
 
     def signal_handler(self, signal, frame):
-        self.radio.stop()
-        loop = asyncio.get_event_loop()
-        loop.stop()
-        self.oled.show()
-        self.display_splash(os.path.join(self.__script_dir_name, "zzz.bmp"))
-        self.scroll_right(self.splash_virtual, (0,0))
-        self.oled.hide()
-        sys.exit(0)
+        if not self.doing_shutdown: # Only if unexpected shutdown only
+            self.radio.stop()
+            self.power = False
+            self.doing_shutdown = True
+            self.metadataThread.join()
+            self.displayThread.join()
+            self.dataThread.join()
+            self.oled.show()
+            self.display_splash(os.path.join(self.__script_dir_name, "zzz.bmp"))
+            self.scroll_right(self.splash_virtual, (0,0))
+            self.oled.hide()
 
     def show_text(self, text, secondary_text = "") -> None:
         self.main_text = f"{text} {self.radio.get_channel_name()}"
         self.secondary_text = secondary_text
         self.redraw = True
 
-    async def refresh_display_data(self) -> None:
-        while True:
+    def refresh_display_data(self) -> None:
+        while not self.doing_shutdown:
             if self.power:
-                if time.time() > self.__last_display_refresh + self.__display_refresh_rate:
-                    old_main_text = self.main_text
-                    old_secondary_text = self.secondary_text
-                    self.main_text = self.radio.get_channel_name()
-                    self.secondary_text = self.radio.get_display()
-                    self.__last_display_refresh = time.time()
-                    if (old_main_text != self.main_text) or (old_secondary_text != self.secondary_text):
-                        self.redraw = True
-            else:
-                if time.time() > self.__off_time + self.__off_time_limit:
-                    print(f"Time: {time.ctime(time.time())}")
-                    print(f"Off time limit: {time.ctime(self.__off_time + self.__off_time_limit)}")
-                    os.system("sudo shutdown -h now")
-            await asyncio.sleep(self.__display_refresh_rate)
+                #if time.time() > self.__last_display_refresh + self.__data_refresh_rate: # Useless ?!
+                old_main_text = self.main_text
+                old_secondary_text = self.secondary_text
+                self.main_text = self.radio.get_channel_name()
+                self.secondary_text = self.radio.get_display() # Causes hang during metadata API call
+                #self.__last_display_refresh = time.time()
+                if (old_main_text != self.main_text) or (old_secondary_text != self.secondary_text):
+                    self.redraw = True
+            # Disabling inactivity shutdown as long as there is no RTC in the radio
+            # This has been wrongly triggered on several cases when time was not already synced
+            #else:
+            #    if time.time() > self.__off_time + self.__off_time_limit:
+            #        print(f"Time: {time.ctime(time.time())}")
+            #        print(f"Off time limit: {time.ctime(self.__off_time + self.__off_time_limit)}")
+            #        print(f"{time.ctime(time.time())} : Extinction totale par délai d'inactivité")
+            #        os.system("sudo shutdown -h now")
+            time.sleep(self.__data_refresh_rate)
+
+    def refresh_metadata(self):
+        while not self.doing_shutdown:
+            if self.power:
+                self.radio.current_channel.fetch_metadata()
+            time.sleep(self.__data_refresh_rate)
 
     def get_volume_text(self) -> str:
         icontext = ""
@@ -235,12 +255,12 @@ class PiWebRadioApp():
                                         icontext += "J"
         return icontext
 
-    async def main_display(self):
+    def main_display(self):
         #TODO: Introduire un self.mode pour différencier les fonctionnalités : offline, radio, réveil, bluetooth, podcasts...
         #TODO: Définir une arborescence de menu pour les différentes fonctionnalités
         self.redraw = True
         x3=128
-        while True:
+        while not self.doing_shutdown:
             if self.power:
                 self.oled.show()
                 if self.redraw:
@@ -287,7 +307,7 @@ class PiWebRadioApp():
                     pause2-=1
 
                 # Power mode refresh rate
-                await asyncio.sleep(0.05)
+                time.sleep(self.__display_refresh_rate)
             if self.clock:
                 self.oled.show()
                 time_text = time.strftime("%H:%M")
@@ -298,12 +318,12 @@ class PiWebRadioApp():
                 x3-=5 # Vitesse de scroll de l'horloge
                 if x3 - time_text_length < 0:
                     x3=128 #TODO : Défiler l'heure autour de l'écran
-                # Off mode refresh rate
-                await asyncio.sleep(1) # Si temps d'attente trop long, le display ne se met pas en marche avec la radio !
+                # Off mode refresh rate : one tick per seconde
+                time.sleep(1) # Si temps d'attente trop long, le display ne se met pas en marche avec la radio !
 
-    async def power_monitor(self):
+    def power_monitor(self):
         self.power_alert = 0
-        while True:
+        while not self.doing_shutdown:
             # get cpu low voltage indicator
             #t = os.popen('/home/laurent/test_throttled.sh').readline() #TEST MODE
             t = os.popen('vcgencmd get_throttled').readline()
@@ -319,27 +339,126 @@ class PiWebRadioApp():
                     self.power = False
                     self.clock = False
                     self.oled.hide()
+                    print(f"{time.ctime(time.time())} : Extinction totale par alerte voltage")
                     os.system("sudo shutdown -h now")
             else:
                 self.power_alert = 0
-            await asyncio.sleep(60)
+            time.sleep(60)
 
-    async def run(self):
-        try:
-            await asyncio.gather(
-                self.refresh_display_data(),
-                self.main_display(),
-                self.power_monitor()
-            )
-        except (SystemExit, KeyboardInterrupt):
-            # cancel current task
-            asyncio.current_task().cancel()
+    def api_next_radio(self):
+        response = self.radio.next_channel()
+        if response != "":
+            self.show_text(">>", "Chargement (API)")
+            return response
+        return "Actuellement éteint"
 
-            # give time to other tasks to run (including me)
-            await asyncio.sleep(0)
-            raise
-        except:
-            raise
+    def api_previous_radio(self):
+        response = self.radio.previous_channel()
+        if response != "":
+            self.show_text("<<", "Chargement (API)")
+            return response
+        return "Actuellement éteint"
+
+    def api_volume_up(self):
+        self.volume = self.radio.volume_up()
+        return f"Volume : {self.volume}"
+
+    def api_volume_down(self):
+        self.volume = self.radio.volume_down()
+        return f"Volume : {self.volume}"
+
+    def api_mute(self):
+        new_volume = self.radio.mute()
+        if new_volume != -1:
+            if new_volume == 0:
+                self.is_mute = True
+            else:
+                self.is_mute = False
+        return (f"Mute : {self.is_mute}")
+
+    def api_toggle_on_off(self):
+        self.toggle_on_off()
+        if self.power:
+            state = "On"
+        else:
+            state = "Off"
+        return f"Nouvel &eacute;tat : {state}"
+
+    def api_total_shutdown(self):
+        self.radio.stop()
+        self.power = False
+        self.clock = False
+        self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"))
+        self.oled.hide()
+        self.doing_shutdown = True
+        self.metadataThread.join()
+        self.displayThread.join()
+        self.dataThread.join()
+        print(f"{time.ctime(time.time())} : Extinction totale par API")
+        os.system("sudo shutdown -h now")
+        return "Extinction totale en cours"
+
+    def api_reboot(self):
+        self.radio.stop()
+        self.power = False
+        self.clock = False
+        self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"))
+        self.oled.hide()
+        self.doing_shutdown = True
+        self.metadataThread.join()
+        self.displayThread.join()
+        self.dataThread.join()
+        print(f"{time.ctime(time.time())} : Reboot par API")
+        os.system("sudo reboot")
+        return "Reboot en cours"
+
+    def api_list_radio(self):
+        channels = []
+        for channel in self.radio.channels:
+            channels.append({
+                "num" : self.radio.channels.index(channel),
+                "name" : channel.name
+            })
+        return channels
+
+    def api_switch_radio(self):
+        if request.args.get("radio") and request.args.get("radio").isdigit():
+            self.radio.switch_channel(int(request.args.get("radio")) - self.radio.channel_num)
+            return self.radio.channels[int(request.args.get("radio"))].name
+        else:
+            abort(400)
+
+    def api_set_volume(self):
+        if request.args.get("volume") and request.args.get("volume").isdigit():
+            self.volume = self.radio.set_volume(int(request.args.get("volume")))
+            return f"Volume : {self.volume}"
+        else:
+            abort(400)
+
+    def run_api(self):
+        #TODO : Réponses API mieux structurées
+        self.api.add_url_rule("/next", view_func=self.api_next_radio)
+        self.api.add_url_rule("/previous", view_func=self.api_previous_radio)
+        self.api.add_url_rule("/volumeup", view_func=self.api_volume_up)
+        self.api.add_url_rule("/volumedown", view_func=self.api_volume_down)
+        self.api.add_url_rule("/setvolume", view_func=self.api_set_volume)
+        self.api.add_url_rule("/mute", view_func=self.api_mute)
+        self.api.add_url_rule("/onoff", view_func=self.api_toggle_on_off)
+        self.api.add_url_rule("/totalshutdown", view_func=self.api_total_shutdown)
+        self.api.add_url_rule("/reboot", view_func=self.api_reboot)
+        self.api.add_url_rule("/list", view_func=self.api_list_radio)
+        self.api.add_url_rule("/switch", view_func=self.api_switch_radio)
+        self.api.run(host="0.0.0.0", port=80, debug=self.__debug, use_reloader=False)
+
+    def run_threads(self):
+        self.dataThread = threading.Thread(target=self.refresh_display_data, args=())
+        self.dataThread.start()
+        self.metadataThread = threading.Thread(target=self.refresh_metadata, args=())
+        self.metadataThread.start()
+        self.displayThread = threading.Thread(target=self.main_display, args=())
+        self.displayThread.start()
+        self.apiThread = threading.Thread(target=self.run_api, args=(), daemon=True)
+        self.apiThread.start()
 
 #
 # Main loop
@@ -347,10 +466,7 @@ class PiWebRadioApp():
 if __name__ == "__main__":
     try:
         app = PiWebRadioApp()
-        asyncio.run(app.run())
+        #asyncio.run(app.run())
+        app.run_threads()
     except (SystemExit, KeyboardInterrupt):
-        pass
-
-
-
-
+        exit(0)

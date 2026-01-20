@@ -3,8 +3,10 @@ import asyncio
 from textual.app import App, ComposeResult
 from textual.css.query import NoMatches
 from textual.widgets import Button, Header, Footer, Label
-from textual import on
+from textual import on, work
+from flask import Flask
 import time
+#import api
 
 from radio import Radio
 
@@ -40,7 +42,7 @@ class RadioApp(App):
         ("m", "mute()", "Mute"),
         ("s", "toggle_on_off()", "Toggle On/Off")
     ]
-
+    api = None
     radio = Radio()
     __display_refresh_rate: int = 2 # in seconds
     __last_display_refresh: float = 0.0
@@ -60,6 +62,16 @@ class RadioApp(App):
 
     def on_mount(self) -> None:
         self.run_worker(self.display_update_loop())
+        self.api = Flask(__name__)
+        self.api.add_url_rule("/next", view_func=self.next_radio)
+        self.api.add_url_rule("/previous", view_func=self.previous_radio)
+        self.api.add_url_rule("/volumeup", view_func=self.volume_up)
+        self.api.add_url_rule("/volumedown", view_func=self.volume_down)
+        self.run_api()
+
+    @work(thread=True)
+    def run_api(self) -> None:
+        self.api.run(host="0.0.0.0", port=8080)
 
     #
     # Start worker to periodically update display
@@ -80,27 +92,36 @@ class RadioApp(App):
         else:
             self.show_text("Shut Off")
 
+
     @on(Button.Pressed, "#next")
-    def next_radio(self) -> None:
-        if self.radio.next_channel():
+    def next_radio(self) -> str:
+        text = self.radio.next_channel()
+        if text != "":
             self.show_text("Next")
+            return text
 
     @on(Button.Pressed, "#previous")
-    def previous_radio(self) -> None:
-        if self.radio.previous_channel():
+    def previous_radio(self) -> str:
+        text = self.radio.previous_channel()
+        if text != "":
             self.show_text("Previous")
+            return text
 
     @on(Button.Pressed, "#volumeUp")
-    def volume_up(self) -> None:
+    def volume_up(self) -> str:
         new_volume = self.radio.volume_up()
         if new_volume != -1:
-            self.show_text(f"Volume Up : {new_volume}")
+            text = f"Volume Up : {new_volume}"
+            self.show_text(text)
+            return text
 
     @on(Button.Pressed, "#volumeDown")
-    def volume_down(self) -> None:
+    def volume_down(self) -> str:
         new_volume = self.radio.volume_down()
         if new_volume != -1:
-            self.show_text(f"Volume Down : {new_volume}")
+            text = f"Volume Down : {new_volume}"
+            self.show_text(text)
+            return text
 
     @on(Button.Pressed, "#mute")
     def mute(self) -> None:
@@ -152,5 +173,9 @@ class RadioApp(App):
 # Main loop
 #
 if __name__ == "__main__":
-    app = RadioApp()
-    app.run()
+    try:
+        app = RadioApp()
+        app.run()
+    except KeyboardInterrupt:
+        app.workers.cancel_all()
+        raise

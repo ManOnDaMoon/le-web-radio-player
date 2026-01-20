@@ -121,6 +121,7 @@ class RadioFranceChannel(RadioChannel):
         self.artist_name = None
         self.last_metadata_refresh = 0 # In epoch time
         self.time_to_refresh = 0 # In seconds
+        self.force_metadata_refresh = False
 
     def get_channel_name(self):
         return self.name
@@ -139,7 +140,7 @@ class RadioFranceChannel(RadioChannel):
         return infos
 
     def get_display_text(self) -> str:
-        self.fetch_metadata()
+        #self.fetch_metadata()
         infos = self.get_current_track_info()
         infos.pop('global_program')
         if (infos['name'] == infos['program_name']) :
@@ -151,13 +152,14 @@ class RadioFranceChannel(RadioChannel):
     def fetch_metadata(self, force: bool = False):
         if ((time.time() > self.last_metadata_refresh + 60) # Account for 1 minute max from last refresh
                 or (time.time() > self.time_to_refresh + 5)
-                or force): # Account for 5s of streaming delay
+                or self.force_metadata_refresh): # Account for 5s of streaming delay
+            self.force_metadata_refresh = False
             api_url = self.__api_url.format(self.__RF_channel_id)
             response = None
             try:
                 response = requests.get(api_url, timeout=1.0) # 1s timeout
             except Exception as e:
-                print(e)
+                print(f"{time.ctime(time.time())} : Exception : {e}")
 
             if response:
                 if not response.ok:
@@ -189,3 +191,6 @@ def get_radiofrance_channels() -> list[RadioFranceChannel]:
     for channel in __default_channels:
         radiofrance_channels.append(RadioFranceChannel(channel))
     return radiofrance_channels
+
+if __name__ == "__main__":
+    exit(0)

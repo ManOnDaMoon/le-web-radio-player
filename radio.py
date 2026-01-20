@@ -39,7 +39,8 @@ class Radio:
             self.media.get_mrl()
             self.media_player.audio_set_volume(self.volume)
             self.media_player.set_media(self.media)
-            self.current_channel.fetch_metadata(True)  # instead of media.parse() / Forcing update
+            self.current_channel.force_metadata_refresh = True
+            #self.current_channel.fetch_metadata(True)  # Causes hang during metadata API call
             self.play()
         else:
             self.power = False
@@ -58,7 +59,8 @@ class Radio:
             self.media = self.__vlc_instance.media_new(self.current_channel.get_channel_url())
             self.media.get_mrl()
             self.media_player.set_media(self.media)
-            self.current_channel.fetch_metadata(True)  # instead of media.parse() / Forcing update
+            self.current_channel.force_metadata_refresh = True
+            #self.current_channel.fetch_metadata(True)  # Causes hang during metadata API call
             self.play()
             return self.current_channel.get_channel_name()
         else:
@@ -69,6 +71,20 @@ class Radio:
 
     def previous_channel(self) -> str :
         return self.switch_channel(-1)
+
+    def set_volume(self, volume: int) -> int:
+        if self.media_player.get_state() == vlc.State.Playing:
+            if volume >= self.__max_volume:
+                self.volume = self.__max_volume
+            else:
+                if volume <= self.__min_volume:
+                    self.volume = self.__min_volume
+                else:
+                    self.volume = volume
+            self.media_player.audio_set_volume(self.volume)
+            return self.volume
+        else:
+            return -1
 
     def volume_up(self) -> int:
         if self.media_player.get_state() == vlc.State.Playing:
@@ -112,7 +128,7 @@ class Radio:
         if self.media_player.get_state() == vlc.State.Ended or self.media_player.get_state() == vlc.State.Error:
             return f"{self.display_text} - /!\\ Error playing stream"
         else:
-            return self.current_channel.get_display_text()
+            return self.current_channel.get_display_text() # Causes hang during metadata API call
 
     def get_channel_name(self) -> str:
         if self.current_channel:

@@ -139,3 +139,89 @@ sudo apt install pip -y
 sudo pip3 install --user --upgrade --break-system-packages pillow
 pip3 install --user --upgrade --break-system-packages pillow
 ```
+
+Installer Flask pour l'API web (potentiellement déjà installé)
+```
+sudo apt install python3-flask
+```
+
+# Web API
+
+L'API est appelable en utilisant l'adresse IP de la radio ou son nom local, sur le port 80. 
+
+Ex: `myradio.local/route`
+
+## Routes
+
+### Next et Previous
+`myradio.local/next`
+`myradio.local/previous`
+
+Naviguer dans les stations
+
+### Volumeup et Volumedown
+
+`myradio.local/volumeup`
+`myradio.local/volumedown`
+
+Augmenter/Réduire le volume
+
+### Setvolume
+`myradio.local/setvolume?volume=x`
+
+Mettre à jour le volume à la valeur `x` (entre 0 et 100)
+
+### Mute
+`myradio.local/mute`
+
+Couper le son
+
+### Onoff
+`myradio.local/onoff`
+
+Eteindre le player, en laissant la radio allumée en mode horloge.
+
+### List
+`myradio.local/list`
+
+Obtenir la liste des radios au format JSON.
+Utile pour utilisation avec la route `/switch` par exemple.
+```
+[
+      {
+        "name": "Mon petit France Inter",
+        "num": 0
+      },
+      {
+        "name": "FIP",
+        "num": 1
+      },
+      {
+        "name": "FIP Rock",
+        "num": 2
+      },
+  
+  ...
+  
+  ]
+ ```
+
+### Switch  
+`myradio.local/switch?radio=x`
+
+Sélectionner la radio `x` (où `x` est la valeur `num` retournée par la route `/list`)
+
+
+### Totalshutdown
+
+`myradio.local/totalshutdown`
+
+Lancer un `sudo shutdown -h now` pour éteindre le RPi.
+
+### Reboot
+
+`myradio.local/reboot`
+
+Lancer un `sudo reboot` pour redémarrer le RPi.
+
+Lancer un reboot
