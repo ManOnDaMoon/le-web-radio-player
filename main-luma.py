@@ -17,9 +17,9 @@ from radio import Radio
 
 class PiWebRadioApp():
 
-    __debug = True
+    __debug = False
     __data_refresh_rate: int = 2  # in seconds
-    __display_refresh_rate: float = 0.5
+    __display_refresh_rate: float = 0.2
     __last_display_refresh: float = 0.0
     __off_time_limit: int = 15*60 # in seconds
     __off_time: float = 0
@@ -100,22 +100,12 @@ class PiWebRadioApp():
                 pass
 
     # VIRTUAL
-    def scroll_left(self, virtual, pos):
-        x, y = pos
-        while x >= 0:
-            virtual.set_position((x, y))
-            x -= 1
-        x = 0
-        return (x, y)
-
     def scroll_right(self, virtual, pos):
         x, y = pos
         if virtual.width > self.oled.width:
             while x < virtual.width - self.oled.width:
                 virtual.set_position((x, y))
                 x += 2
-            x -= 2
-        return (x, y)
 
     def display_splash(self, image_path, wait_time = 1):
         self.splash = Image.open(image_path).convert('RGBA')
@@ -271,22 +261,22 @@ class PiWebRadioApp():
                         line2 = self.secondary_text
                         if draw.textlength(line2, font=self.text_font) > 128:
                             line2 = self.secondary_text + "       " + self.secondary_text + "       "
-                    pause1 = 20 # Pause (20*0,05 = ~1s) avant de démarrer le scroll
-                    pause2 = 20 # Pause (20*0,05 = ~1s) avant de démarrer le scroll
+                    pause1 = 5 # Pause (5*0,2 = ~1s) avant de démarrer le scroll
+                    pause2 = 5 # Pause (5*0,2 = ~1s) avant de démarrer le scroll
                     x1 = 0
                     x2 = 0
                     self.redraw = False
                 icontext = self.get_volume_text()
                 with canvas(self.oled) as draw:
-                    # TOP ICONS
+                    # TOP ICONS - TODO : Optimiser pour ne pas redessiner les icones si elles n'ont pas changé
                     draw.text((0, self.icons_y_position), icontext, font=self.icons_font, fill="white")
 
-                    # HEURE
+                    # HEURE - TODO : Optimiser pour ne pas recalculer ça toutes les microsecondes.
                     time_text = time.strftime("%H:%M")
                     time_text_length = draw.textlength(time_text, font_size=15)
                     draw.text((128 - time_text_length, self.icons_y_position - 2), time_text,  font_size=15, fill="white")
 
-                    # TITLES
+                    # TITLES - TODO : ne calculer les textlength qu'une fois
                     l1_length = draw.textlength(line1, font=self.title_font) / 2
                     l2_length = draw.textlength(line2, font=self.text_font) / 2
                     if (l1_length <= 128) or (l1_length + x1 < 0):
@@ -308,6 +298,7 @@ class PiWebRadioApp():
 
                 # Power mode refresh rate
                 time.sleep(self.__display_refresh_rate)
+
             if self.clock:
                 self.oled.show()
                 time_text = time.strftime("%H:%M")
@@ -318,7 +309,8 @@ class PiWebRadioApp():
                 x3-=5 # Vitesse de scroll de l'horloge
                 if x3 - time_text_length < 0:
                     x3=128 #TODO : Défiler l'heure autour de l'écran
-                # Off mode refresh rate : one tick per seconde
+
+                # Off mode refresh rate : one tick per second
                 time.sleep(1) # Si temps d'attente trop long, le display ne se met pas en marche avec la radio !
 
     def power_monitor(self):
@@ -346,26 +338,39 @@ class PiWebRadioApp():
             time.sleep(60)
 
     def api_next_radio(self):
-        response = self.radio.next_channel()
-        if response != "":
+        channel = self.radio.next_channel()
+        if channel != "":
             self.show_text(">>", "Chargement (API)")
-            return response
-        return "Actuellement éteint"
+        response = {
+            "radio" : self.main_text,
+            "title" : self.secondary_text
+        }
+        return response
+
 
     def api_previous_radio(self):
-        response = self.radio.previous_channel()
-        if response != "":
+        channel = self.radio.previous_channel()
+        if channel != "":
             self.show_text("<<", "Chargement (API)")
-            return response
-        return "Actuellement éteint"
+        response = {
+            "radio" : self.main_text,
+            "title": self.secondary_text
+        }
+        return response
 
     def api_volume_up(self):
         self.volume = self.radio.volume_up()
-        return f"Volume : {self.volume}"
+        response = {
+            "volume" : self.volume
+        }
+        return response
 
     def api_volume_down(self):
         self.volume = self.radio.volume_down()
-        return f"Volume : {self.volume}"
+        response = {
+            "volume" : self.volume
+        }
+        return response
 
     def api_mute(self):
         new_volume = self.radio.mute()
@@ -374,15 +379,18 @@ class PiWebRadioApp():
                 self.is_mute = True
             else:
                 self.is_mute = False
-        return (f"Mute : {self.is_mute}")
+        response = {
+            "volume" : new_volume
+        }
+        return response
 
     def api_toggle_on_off(self):
         self.toggle_on_off()
-        if self.power:
-            state = "On"
-        else:
-            state = "Off"
-        return f"Nouvel &eacute;tat : {state}"
+        response = {
+            "radio" : self.main_text,
+            "title" : self.secondary_text
+        }
+        return response
 
     def api_total_shutdown(self):
         self.radio.stop()
@@ -424,16 +432,30 @@ class PiWebRadioApp():
     def api_switch_radio(self):
         if request.args.get("radio") and request.args.get("radio").isdigit():
             self.radio.switch_channel(int(request.args.get("radio")) - self.radio.channel_num)
-            return self.radio.channels[int(request.args.get("radio"))].name
+            response = {
+                "radio" : self.main_text,
+                "title" : self.secondary_text
+            }
+            return response
         else:
             abort(400)
 
     def api_set_volume(self):
         if request.args.get("volume") and request.args.get("volume").isdigit():
             self.volume = self.radio.set_volume(int(request.args.get("volume")))
-            return f"Volume : {self.volume}"
+            response = {
+                "volume" : self.volume
+            }
+            return response
         else:
             abort(400)
+
+    def api_get_title(self):
+        titles = {
+            "radio" : self.main_text,
+            "title" : self.secondary_text
+        }
+        return titles
 
     def run_api(self):
         #TODO : Réponses API mieux structurées
@@ -448,9 +470,11 @@ class PiWebRadioApp():
         self.api.add_url_rule("/reboot", view_func=self.api_reboot)
         self.api.add_url_rule("/list", view_func=self.api_list_radio)
         self.api.add_url_rule("/switch", view_func=self.api_switch_radio)
+        self.api.add_url_rule("/title", view_func=self.api_get_title)
         self.api.run(host="0.0.0.0", port=80, debug=self.__debug, use_reloader=False)
 
     def run_threads(self):
+        #TODO : Réintégrer le dataThread dans le displayThread
         self.dataThread = threading.Thread(target=self.refresh_display_data, args=())
         self.dataThread.start()
         self.metadataThread = threading.Thread(target=self.refresh_metadata, args=())
@@ -466,7 +490,6 @@ class PiWebRadioApp():
 if __name__ == "__main__":
     try:
         app = PiWebRadioApp()
-        #asyncio.run(app.run())
         app.run_threads()
     except (SystemExit, KeyboardInterrupt):
         exit(0)
