@@ -342,8 +342,8 @@ class PiWebRadioApp():
         if channel != "":
             self.show_text(">>", "Chargement (API)")
         response = {
-            "radio" : self.main_text,
-            "title" : self.secondary_text
+            "radio" : self.radio.get_channel_name(),
+            "title" : self.radio.get_display()
         }
         return response
 
@@ -353,8 +353,8 @@ class PiWebRadioApp():
         if channel != "":
             self.show_text("<<", "Chargement (API)")
         response = {
-            "radio" : self.main_text,
-            "title": self.secondary_text
+            "radio" : self.radio.get_channel_name(),
+            "title" : self.radio.get_display()
         }
         return response
 
@@ -387,8 +387,8 @@ class PiWebRadioApp():
     def api_toggle_on_off(self):
         self.toggle_on_off()
         response = {
-            "radio" : self.main_text,
-            "title" : self.secondary_text
+            "radio" : self.radio.get_channel_name(),
+            "title" : self.radio.get_display()
         }
         return response
 
@@ -433,8 +433,8 @@ class PiWebRadioApp():
         if request.args.get("radio") and request.args.get("radio").isdigit():
             self.radio.switch_channel(int(request.args.get("radio")) - self.radio.channel_num)
             response = {
-                "radio" : self.main_text,
-                "title" : self.secondary_text
+                "radio": self.radio.get_channel_name(),
+                "title": self.radio.get_display()
             }
             return response
         else:
@@ -452,8 +452,8 @@ class PiWebRadioApp():
 
     def api_get_title(self):
         titles = {
-            "radio" : self.main_text,
-            "title" : self.secondary_text
+            "radio" : self.radio.get_channel_name(),
+            "title" : self.radio.get_display()
         }
         return titles
 
