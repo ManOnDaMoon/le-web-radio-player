@@ -521,7 +521,7 @@ class PiWebRadioApp():
         self.api.add_url_rule("/list", view_func=self.api_list_radio)
         self.api.add_url_rule("/switch", view_func=self.api_switch_radio)
         self.api.add_url_rule("/title", view_func=self.api_get_title)
-        self.api.add_url_rul("/battery", view_func=self.api_get_battery)
+        self.api.add_url_rule("/battery", view_func=self.api_get_battery)
         self.api.run(host="0.0.0.0", port=80, debug=self.__debug, use_reloader=False)
 
     def run_threads(self):
