@@ -151,19 +151,20 @@ class PiWebRadioApp():
             self.clock = True
             self.__off_time = time.time()
 
-    def total_shutdown(self, button):
-        button.was_held = True #TODO: Remove. Useless since we're shutting down the Pi
-        #TODO: Group the following actions in another function in order to refactor code
-        #Currently called in total_shutdown, api_shutdown, api_reboot, signal_handler
+    def shutdown_tasks(self):
         self.radio.stop()
         self.power = False
         self.clock = False
+        self.doing_shutdown = True
+        for thread in self.threads:
+            thread.join()
         self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"))
         self.oled.hide()
-        self.doing_shutdown = True
-        self.metadataThread.join()
-        self.displayThread.join()
-        self.dataThread.join()
+
+
+    def total_shutdown(self, button):
+        #Currently called in total_shutdown, api_shutdown, api_reboot, signal_handler
+        self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Extinction totale par bouton physique")
         os.system("sudo shutdown -h now")
 
@@ -200,17 +201,7 @@ class PiWebRadioApp():
     # Catches SIGINT, SIGTERM, SIGHUP and terminates all threads properly
     def signal_handler(self, signal, frame):
         if not self.doing_shutdown: # Only if unexpected shutdown only
-            self.radio.stop()
-            self.power = False
-            self.doing_shutdown = True
-            # TODO : Iterate over a threads array
-            self.metadataThread.join()
-            self.displayThread.join()
-            self.dataThread.join()
-            self.oled.show()
-            self.display_splash(os.path.join(self.__script_dir_name, "zzz.bmp"))
-            self.scroll_right(self.splash_virtual, (0,0))
-            self.oled.hide()
+            self.shutdown_tasks()
 
     # Forces a custom text to be displayed immediately in front of the metadata text
     def show_text(self, text, secondary_text = "") -> None:
@@ -358,17 +349,8 @@ class PiWebRadioApp():
                     os.popen("espeak -v fr+f1 -s 120 \"Batterie faible\" --stdout | aplay")
                 self.display_splash(os.path.join(self.__script_dir_name, "lowpower.bmp"))
                 if self.power_alert >= 3:
-                    # TODO : Refactor shutdown code
-                    self.radio.stop()
-                    self.power = False
-                    self.clock = False
-                    self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"))
-                    self.oled.hide()
-                    self.doing_shutdown = True
-                    self.metadataThread.join()
-                    self.displayThread.join()
-                    self.dataThread.join()
-                    print(f"{time.ctime(time.time())} : Extinction totale par alerte voltage")
+                    self.shutdown_tasks()
+                    print(f"{time.ctime(time.time())} : Batterie trop faible")
                     os.system("sudo shutdown -h now")
             else:
                 self.power_alert = 0
@@ -435,29 +417,13 @@ class PiWebRadioApp():
         return response
 
     def api_total_shutdown(self):
-        self.radio.stop()
-        self.power = False
-        self.clock = False
-        self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"))
-        self.oled.hide()
-        self.doing_shutdown = True
-        self.metadataThread.join()
-        self.displayThread.join()
-        self.dataThread.join()
+        self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Extinction totale par API")
         os.system("sudo shutdown -h now")
         return "Extinction totale en cours"
 
     def api_reboot(self):
-        self.radio.stop()
-        self.power = False
-        self.clock = False
-        self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"))
-        self.oled.hide()
-        self.doing_shutdown = True
-        self.metadataThread.join()
-        self.displayThread.join()
-        self.dataThread.join()
+        self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Reboot par API")
         os.system("sudo reboot")
         return "Reboot en cours"
@@ -508,7 +474,6 @@ class PiWebRadioApp():
         return battery_status
 
     def run_api(self):
-        #TODO : Réponses API mieux structurées
         self.api.add_url_rule("/next", view_func=self.api_next_radio)
         self.api.add_url_rule("/previous", view_func=self.api_previous_radio)
         self.api.add_url_rule("/volumeup", view_func=self.api_volume_up)
@@ -525,16 +490,18 @@ class PiWebRadioApp():
         self.api.run(host="0.0.0.0", port=80, debug=self.__debug, use_reloader=False)
 
     def run_threads(self):
-        #TODO : Réintégrer le dataThread dans le displayThread
         self.threads = []
-        self.dataThread = threading.Thread(target=self.refresh_display_data, args=())
-        self.dataThread.start()
-        self.metadataThread = threading.Thread(target=self.refresh_metadata, args=())
-        self.metadataThread.start()
-        self.displayThread = threading.Thread(target=self.main_display, args=())
-        self.displayThread.start()
-        self.apiThread = threading.Thread(target=self.run_api, args=(), daemon=True)
-        self.apiThread.start()
+        self.threads += threading.Thread(target=self.refresh_display_data, args=())
+        self.threads += threading.Thread(target=self.refresh_metadata, args=())
+        self.threads += threading.Thread(target=self.main_display, args=())
+        for thread in self.threads:
+            thread.start()
+
+        self.daemons = []
+        self.daemons += threading.Thread(target=self.run_api, args=(), daemon=True)
+        for daemon in self.daemons:
+            daemon.start()
+
 
 #
 # Main loop
