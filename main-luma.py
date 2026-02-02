@@ -37,6 +37,9 @@ class PiWebRadioApp():
         self.__ups_bus = SMBus(1)  # i2c-port 1
         self.__battery_alert_limit = 10.0 # Raise power alert if below 10%
         self.__battery_charge_threshold = 4000 # Capacity above 4000mV is charging
+        self.battery_capacity = 0.0
+        self.battery_percentage = 0.0
+        self.update_battery_status()
 
         self.__script_dir_name = os.path.dirname(__file__)
         # Display splash screen
@@ -333,18 +336,20 @@ class PiWebRadioApp():
                 # Off mode refresh rate : one tick per second
                 time.sleep(1) # Si temps d'attente trop long, le display ne se met pas en marche avec la radio !
 
+    def update_battery_status(self):
+        vcellH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x03)
+        vcellL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x04)
+        socH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x05)
+        socL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x06)
+        self.battery_capacity = (((vcellH & 0x0F) << 8) + vcellL) * 1.25  # capacity
+        self.battery_percentage = ((socH << 8) + socL) * 0.003906  # current electric quantity percentage
+
     # THREAD (WIP)
     # TODO : Implement DFR0528 UPS Hat power management here. Currently unused.
     def power_monitor(self):
         self.power_alert = 0
         while not self.doing_shutdown:
-            vcellH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x03)
-            vcellL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x04)
-            socH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x05)
-            socL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x06)
-            self.battery_capacity = (((vcellH & 0x0F) << 8) + vcellL) * 1.25  # capacity
-            self.battery_percentage = ((socH << 8) + socL) * 0.003906  # current electric quantity percentage
-
+            self.update_battery_status()
             if ((self.battery_percentage < self.__battery_alert_limit)
                     and (self.battery_capacity <  self.__battery_charge_threshold)) :
                 self.power_alert += 1
@@ -494,6 +499,14 @@ class PiWebRadioApp():
         }
         return titles
 
+    def api_get_battery(self):
+        self.update_battery_status()
+        battery_status = {
+            "capacity" : self.battery_capacity,
+            "percentage" : self.battery_percentage
+        }
+        return battery_status
+
     def run_api(self):
         #TODO : Réponses API mieux structurées
         self.api.add_url_rule("/next", view_func=self.api_next_radio)
@@ -508,10 +521,12 @@ class PiWebRadioApp():
         self.api.add_url_rule("/list", view_func=self.api_list_radio)
         self.api.add_url_rule("/switch", view_func=self.api_switch_radio)
         self.api.add_url_rule("/title", view_func=self.api_get_title)
+        self.api.add_url_rul("/battery", view_func=self.api_get_battery)
         self.api.run(host="0.0.0.0", port=80, debug=self.__debug, use_reloader=False)
 
     def run_threads(self):
         #TODO : Réintégrer le dataThread dans le displayThread
+        self.threads = []
         self.dataThread = threading.Thread(target=self.refresh_display_data, args=())
         self.dataThread.start()
         self.metadataThread = threading.Thread(target=self.refresh_metadata, args=())
