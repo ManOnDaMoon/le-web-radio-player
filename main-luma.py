@@ -491,14 +491,14 @@ class PiWebRadioApp():
 
     def run_threads(self):
         self.threads = []
-        self.threads += threading.Thread(target=self.refresh_display_data, args=())
-        self.threads += threading.Thread(target=self.refresh_metadata, args=())
-        self.threads += threading.Thread(target=self.main_display, args=())
+        self.threads.append(threading.Thread(target=self.refresh_display_data, args=()))
+        self.threads.append(threading.Thread(target=self.refresh_metadata, args=()))
+        self.threads.append(threading.Thread(target=self.main_display, args=()))
         for thread in self.threads:
             thread.start()
 
         self.daemons = []
-        self.daemons += threading.Thread(target=self.run_api, args=(), daemon=True)
+        self.daemons.append(threading.Thread(target=self.run_api, args=(), daemon=True))
         for daemon in self.daemons:
             daemon.start()
 
