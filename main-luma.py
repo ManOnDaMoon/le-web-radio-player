@@ -11,18 +11,20 @@ from luma.core.render import canvas
 from luma.oled.device import ssd1306
 from luma.core.virtual import viewport
 
+from smbus2 import SMBus
+
 from PIL import Image, ImageFont
 
 from radio import Radio
 
 class PiWebRadioApp():
 
-    __debug = False
-    __data_refresh_rate: int = 2  # in seconds
-    __display_refresh_rate: float = 0.2
-    __last_display_refresh: float = 0.0
-    __off_time_limit: int = 15*60 # in seconds
-    __off_time: float = 0
+    __debug = True
+    __data_refresh_rate: int = 2  # Time between two metadata API calls, in seconds
+    __display_refresh_rate: float = 0.2 # Time between two OLED screen refresh, in seconds
+    __last_display_refresh: float = 0.0 # Time since last display data refresh. Currently unused.
+    __off_time_limit: int = 15*60 # Time limit after which the OS shuts down to save battery life, in seconds. Currently Unused.
+    __off_time: float = 0 # Time since the radio has been toggled off
 
     def __init__(self):
         # IO INIT
@@ -30,63 +32,76 @@ class PiWebRadioApp():
         self.serial = i2c(port=1, address=0x3C)
         self.oled = ssd1306(self.serial)
 
+        # TODO: Init UPS hat
+        self.__ups_addr = 0x10  # ups i2c address
+        self.__ups_bus = SMBus(1)  # i2c-port 1
+        self.__battery_alert_limit = 10.0 # Raise power alert if below 10%
+        self.__battery_charge_threshold = 4000 # Capacity above 4000mV is charging
+
         self.__script_dir_name = os.path.dirname(__file__)
+        # Display splash screen
         self.display_splash(os.path.join(self.__script_dir_name, "radiodiane-splash.bmp"))
 
         # CLASS VARIABLES
-        self.main_text = ""
-        self.secondary_text = ""
-        self.volume = 0
-        self.scroll_r_count = 0
+        self.main_text = "" # Main display text, usually the station name
+        self.secondary_text = "" # Secondary display text, usually the track and artist names
+        self.volume = 0 # Initial volume
+        self.scroll_r_count = 0 # Rotary buttons scroll counts
         self.scroll_l_count = 0
-        self.is_mute = False
-        self.power = False
-        self.doing_shutdown = False
-        self.power_alert = 0
-        self.clock = True
-        self.redraw = True
-        self.radio = Radio(self.__debug)
+        self.is_mute = False # Mute indicator
+        self.power = False # Power indicator
+        self.doing_shutdown = False # OS Shutdown in progress indicator
+        self.power_alert = 0 # Power alert indicator
+        self.clock = True # Clock mode indicator
+        self.redraw = True # Force redraw indicator
+        self.radio = Radio(self.__debug) # The actual radio object
+        # OLED display fonts, loaded just once:
         self.icons_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "radiocontrols.ttf"), 16)
         self.title_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "Louis George Cafe.ttf"), 26)
         self.text_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "Louis George Cafe.ttf"), 16)
+        # OLED display default positions
         self.icons_y_position = 0
         self.title_y_position = 16
         self.text_y_position = 42
 
+        # Adding a hold indicator to the Button class
         Button.was_held = False
 
         # Initialisation bouton VOLUME
         self.volume_knob = RotaryEncoder(17, 27, max_steps=10)  # GPIO17 = CLK, GPIO27 = DT
-        self.mute_switch = Button(22, bounce_time=0.1)  # GPIO22 = SW
+        self.mute_switch = Button(22, bounce_time=0.1)  # GPIO22 = SW - Note that Mute switch has no Hold event
 
         # Initialisation bouton CHANNEL
         self.channel_knob = RotaryEncoder(23, 24, max_steps=10)  # GPIO23 = CLK, GPIO24 = DT
         self.on_off_switch = Button(10, hold_time=2, bounce_time=0.1)  # GPIO10 = SW
 
         # Sélecteur Volume
-        self.mute_switch.when_pressed = self.mute
-        self.volume_knob.when_rotated_clockwise = self.volume_up
-        self.volume_knob.when_rotated_counter_clockwise = self.volume_down
-        #TODO: Maintenir le bouton volume pour switcher de mode
+        self.mute_switch.when_pressed = self.button_mute
+        self.volume_knob.when_rotated_clockwise = self.button_volume_up
+        self.volume_knob.when_rotated_counter_clockwise = self.button_volume_down
 
         # Sélecteur station
         self.on_off_switch.when_released = self.on_off_released
         self.on_off_switch.when_held = self.total_shutdown
-        self.channel_knob.when_rotated_clockwise = self.next_radio
-        self.channel_knob.when_rotated_counter_clockwise = self.previous_radio
+        self.channel_knob.when_rotated_clockwise = self.button_next_radio
+        self.channel_knob.when_rotated_counter_clockwise = self.button_previous_radio
 
         # Gestion de l'arrêt forcé
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGHUP, self.signal_handler)
 
-        self.wait_for_internet_connection() #TODO: Replace with an Offline Mode detection
-
-        self.scroll_right(self.splash_virtual, (0,0))
-        self.__off_time = time.time()
+        # TODO : Display a specific information or replace with an Offline mode detection
+        self.wait_for_internet_connection()
 
         # Initialisation API
         self.api = Flask(__name__)
+
+        # Scroll the splashcreen to indicate the end of loading sequence
+        self.scroll_right(self.splash_virtual, (0,0))
+
+        # Start the radio in Off mode
+        self.__off_time = time.time()
 
     def wait_for_internet_connection(self):
         while True:
@@ -108,12 +123,12 @@ class PiWebRadioApp():
                 x += 2
 
     def display_splash(self, image_path, wait_time = 1):
-        self.splash = Image.open(image_path).convert('RGBA')
-        self.splash = self.splash.convert(self.oled.mode)
-        w, h = self.splash.size
+        splash = Image.open(image_path).convert('RGBA')
+        splash = splash.convert(self.oled.mode)
+        w, h = splash.size
         self.splash_virtual = viewport(self.oled, width=w, height=h)
-        self.splash_virtual.display(self.splash)
-        time.sleep(wait_time)
+        self.splash_virtual.display(splash)
+        time.sleep(wait_time) #T0D0 : Find another way to lock splash in place
 
     def on_off_released(self, button):
         if not button.was_held:
@@ -123,6 +138,7 @@ class PiWebRadioApp():
     def toggle_on_off(self):
         self.main_text = ""
         self.secondary_text = ""
+        # TODO : Test self.radio.power instead
         if self.radio.toggle_on_off():
             self.power = True
             self.clock = False
@@ -133,7 +149,9 @@ class PiWebRadioApp():
             self.__off_time = time.time()
 
     def total_shutdown(self, button):
-        button.was_held = True
+        button.was_held = True #TODO: Remove. Useless since we're shutting down the Pi
+        #TODO: Group the following actions in another function in order to refactor code
+        #Currently called in total_shutdown, api_shutdown, api_reboot, signal_handler
         self.radio.stop()
         self.power = False
         self.clock = False
@@ -146,13 +164,13 @@ class PiWebRadioApp():
         print(f"{time.ctime(time.time())} : Extinction totale par bouton physique")
         os.system("sudo shutdown -h now")
 
-    def volume_up(self, rotary_encoder: RotaryEncoder):
+    def button_volume_up(self, rotary_encoder: RotaryEncoder):
         self.volume = self.radio.volume_up()
 
-    def volume_down(self, rotary_encoder: RotaryEncoder):
+    def button_volume_down(self, rotary_encoder: RotaryEncoder):
         self.volume = self.radio.volume_down()
 
-    def next_radio(self, rotary_encoder: RotaryEncoder):
+    def button_next_radio(self, rotary_encoder: RotaryEncoder):
         self.scroll_r_count+=1
         self.scroll_l_count=0
         if self.scroll_r_count >= 3:
@@ -160,7 +178,7 @@ class PiWebRadioApp():
             if self.radio.next_channel():
                 self.show_text(">>", "Chargement")
 
-    def previous_radio(self, rotary_encoder: RotaryEncoder):
+    def button_previous_radio(self, rotary_encoder: RotaryEncoder):
         self.scroll_l_count += 1
         self.scroll_r_count = 0
         if self.scroll_l_count >= 3:
@@ -168,7 +186,7 @@ class PiWebRadioApp():
             if self.radio.previous_channel():
                 self.show_text("<<", "Chargement")
 
-    def mute(self):
+    def button_mute(self):
         new_volume = self.radio.mute()
         if new_volume != -1:
             if new_volume == 0:
@@ -176,11 +194,13 @@ class PiWebRadioApp():
             else:
                 self.is_mute = False
 
+    # Catches SIGINT, SIGTERM, SIGHUP and terminates all threads properly
     def signal_handler(self, signal, frame):
         if not self.doing_shutdown: # Only if unexpected shutdown only
             self.radio.stop()
             self.power = False
             self.doing_shutdown = True
+            # TODO : Iterate over a threads array
             self.metadataThread.join()
             self.displayThread.join()
             self.dataThread.join()
@@ -189,38 +209,37 @@ class PiWebRadioApp():
             self.scroll_right(self.splash_virtual, (0,0))
             self.oled.hide()
 
+    # Forces a custom text to be displayed immediately in front of the metadata text
     def show_text(self, text, secondary_text = "") -> None:
         self.main_text = f"{text} {self.radio.get_channel_name()}"
         self.secondary_text = secondary_text
         self.redraw = True
 
+    # THREAD
+    # While currenlty running, regularly check if track info has changed and set flag to redraw display accordingly.
+    # API metadata refresh happens in its own thread to avoid hanging during the HTTP request.
     def refresh_display_data(self) -> None:
         while not self.doing_shutdown:
             if self.power:
-                #if time.time() > self.__last_display_refresh + self.__data_refresh_rate: # Useless ?!
                 old_main_text = self.main_text
                 old_secondary_text = self.secondary_text
                 self.main_text = self.radio.get_channel_name()
-                self.secondary_text = self.radio.get_display() # Causes hang during metadata API call
-                #self.__last_display_refresh = time.time()
+                self.secondary_text = self.radio.get_display()
                 if (old_main_text != self.main_text) or (old_secondary_text != self.secondary_text):
                     self.redraw = True
-            # Disabling inactivity shutdown as long as there is no RTC in the radio
-            # This has been wrongly triggered on several cases when time was not already synced
-            #else:
-            #    if time.time() > self.__off_time + self.__off_time_limit:
-            #        print(f"Time: {time.ctime(time.time())}")
-            #        print(f"Off time limit: {time.ctime(self.__off_time + self.__off_time_limit)}")
-            #        print(f"{time.ctime(time.time())} : Extinction totale par délai d'inactivité")
-            #        os.system("sudo shutdown -h now")
             time.sleep(self.__data_refresh_rate)
 
+    # THREAD
+    # While currently running, regularly poll metadata API.
+    # The radio object sets itself the correct refresh rate to avoid flooding the API provider.
+    # So a __data_refresh_rate of 1s or 2s is not too long here.
     def refresh_metadata(self):
         while not self.doing_shutdown:
             if self.power:
                 self.radio.current_channel.fetch_metadata()
             time.sleep(self.__data_refresh_rate)
 
+    # Draws the volume icons according to volume
     def get_volume_text(self) -> str:
         icontext = ""
         if not self.is_mute:
@@ -245,9 +264,10 @@ class PiWebRadioApp():
                                         icontext += "J"
         return icontext
 
+    # THREAD
+    # This thread handles the OLED drawing procedures
+    # TODO: Improve performance (see other todos inline) by managing not only 1 redraw flag but multiple redraws for volume, time, metadata, etc.
     def main_display(self):
-        #TODO: Introduire un self.mode pour différencier les fonctionnalités : offline, radio, réveil, bluetooth, podcasts...
-        #TODO: Définir une arborescence de menu pour les différentes fonctionnalités
         self.redraw = True
         x3=128
         while not self.doing_shutdown:
@@ -313,31 +333,48 @@ class PiWebRadioApp():
                 # Off mode refresh rate : one tick per second
                 time.sleep(1) # Si temps d'attente trop long, le display ne se met pas en marche avec la radio !
 
+    # THREAD (WIP)
+    # TODO : Implement DFR0528 UPS Hat power management here. Currently unused.
     def power_monitor(self):
         self.power_alert = 0
         while not self.doing_shutdown:
-            # get cpu low voltage indicator
-            #t = os.popen('/home/laurent/test_throttled.sh').readline() #TEST MODE
-            t = os.popen('vcgencmd get_throttled').readline()
-            b = int(t.split('=')[1], 0)
-            if (b & 0x1) == 1:
-                print(f"{time.ctime(time.time())} : LOW VOLTAGE ALERT")
+            vcellH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x03)
+            vcellL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x04)
+            socH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x05)
+            socL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x06)
+            self.battery_capacity = (((vcellH & 0x0F) << 8) + vcellL) * 1.25  # capacity
+            self.battery_percentage = ((socH << 8) + socL) * 0.003906  # current electric quantity percentage
+
+            if ((self.battery_percentage < self.__battery_alert_limit)
+                    and (self.battery_capacity <  self.__battery_charge_threshold)) :
+                self.power_alert += 1
+                print(f"{time.ctime(time.time())} : LOW VOLTAGE ALERT #{self.power_alert}")
                 if self.power: #Sound only if currently running, else shut down silently
                     os.popen("espeak -v fr+f1 -s 120 \"Batterie faible\" --stdout | aplay")
-                self.power_alert+=1
                 self.display_splash(os.path.join(self.__script_dir_name, "lowpower.bmp"))
                 if self.power_alert >= 3:
+                    # TODO : Refactor shutdown code
                     self.radio.stop()
                     self.power = False
                     self.clock = False
+                    self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"))
                     self.oled.hide()
+                    self.doing_shutdown = True
+                    self.metadataThread.join()
+                    self.displayThread.join()
+                    self.dataThread.join()
                     print(f"{time.ctime(time.time())} : Extinction totale par alerte voltage")
                     os.system("sudo shutdown -h now")
             else:
                 self.power_alert = 0
             time.sleep(60)
 
+    # API ROUTES
     def api_next_radio(self):
+        """
+        API route that handles switching to the next radio in the radio list.
+        :return: Returns JSON object with 'radio' and 'title' fields.
+        """
         channel = self.radio.next_channel()
         if channel != "":
             self.show_text(">>", "Chargement (API)")

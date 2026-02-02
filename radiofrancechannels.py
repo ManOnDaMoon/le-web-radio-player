@@ -140,7 +140,6 @@ class RadioFranceChannel(RadioChannel):
         return infos
 
     def get_display_text(self) -> str:
-        #self.fetch_metadata()
         infos = self.get_current_track_info()
         infos.pop('global_program')
         if (infos['name'] == infos['program_name']) :

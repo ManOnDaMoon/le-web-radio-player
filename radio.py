@@ -31,6 +31,7 @@ class Radio:
     def callback_from_player(self, event: vlc.Event, *args):
         self.set_display(f"callback called: {event.type}, from {args[0]}")
 
+    # Returns the outcoming state of Power
     def toggle_on_off(self):
         if not self.power:
             self.power = True
@@ -126,9 +127,9 @@ class Radio:
         if not self.power:
             return ""
         if self.media_player.get_state() == vlc.State.Ended or self.media_player.get_state() == vlc.State.Error:
-            return f"{self.display_text} - /!\\ Error playing stream"
+            return f"/!\\ Erreur de lecture - {self.display_text}"
         else:
-            return self.current_channel.get_display_text() # Causes hang during metadata API call
+            return self.current_channel.get_display_text()
 
     def get_channel_name(self) -> str:
         if self.current_channel:
