@@ -295,9 +295,10 @@ class PiWebRadioApp():
 
                     # BATTERY STATUS TODO
                     if self.redraw_battery:
-                        battery_text = f"{round(self.battery_percentage, 0)}%"
+                        battery_text = f"{round(self.battery_percentage)}%"
+                        xbatt = 128 - draw.textlength(battery_text, font_size=15)
                         self.redraw_battery = False
-                    draw.text((100, self.icons_y_position - 2), battery_text, font_size=15, fill="white")
+                    draw.text((xbatt, self.icons_y_position - 2), battery_text, font_size=15, fill="white")
 
                     # REDRAW TEXT
                     if self.redraw_main_text:
