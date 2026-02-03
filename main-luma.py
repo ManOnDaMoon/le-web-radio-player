@@ -271,6 +271,8 @@ class PiWebRadioApp():
         self.redraw_secondary_text = True
         self.redraw_volume = True
         self.redraw_battery = True
+        scroll1 = False
+        scroll2 = False
         x3=128
         while not self.doing_shutdown:
 
