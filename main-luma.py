@@ -31,6 +31,7 @@ class PiWebRadioApp():
         # Initialisation DISPLAY
         self.serial = i2c(port=1, address=0x3C)
         self.oled = ssd1306(self.serial)
+        self.oled.contrast(128) #TODO Setup a contrast control
 
         # TODO: Init UPS hat
         self.__ups_addr = 0x10  # ups i2c address
@@ -56,6 +57,7 @@ class PiWebRadioApp():
         self.doing_shutdown = False # OS Shutdown in progress indicator
         self.power_alert = 0 # Power alert indicator
         self.clock = True # Clock mode indicator
+        #TODO : Init all redraw flags
         self.redraw = True # Force redraw indicator
         self.radio = Radio(self.__debug) # The actual radio object
         # OLED display fonts, loaded just once:
@@ -155,12 +157,11 @@ class PiWebRadioApp():
         self.radio.stop()
         self.power = False
         self.clock = False
+        self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"))
         self.doing_shutdown = True
         for thread in self.threads:
             thread.join()
-        self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"))
         self.oled.hide()
-
 
     def total_shutdown(self, button):
         #Currently called in total_shutdown, api_shutdown, api_reboot, signal_handler
@@ -207,7 +208,8 @@ class PiWebRadioApp():
     def show_text(self, text, secondary_text = "") -> None:
         self.main_text = f"{text} {self.radio.get_channel_name()}"
         self.secondary_text = secondary_text
-        self.redraw = True
+        self.redraw_main_text = True
+        self.redraw_secondary_text = True
 
     # THREAD
     # While currenlty running, regularly check if track info has changed and set flag to redraw display accordingly.
@@ -219,8 +221,10 @@ class PiWebRadioApp():
                 old_secondary_text = self.secondary_text
                 self.main_text = self.radio.get_channel_name()
                 self.secondary_text = self.radio.get_display()
-                if (old_main_text != self.main_text) or (old_secondary_text != self.secondary_text):
-                    self.redraw = True
+                if (old_main_text != self.main_text):
+                    self.redraw_main_text = True
+                if (old_secondary_text != self.secondary_text):
+                    self.redraw_secondary_text = True
             time.sleep(self.__data_refresh_rate)
 
     # THREAD
@@ -262,18 +266,20 @@ class PiWebRadioApp():
     # This thread handles the OLED drawing procedures
     # TODO: Improve performance (see other todos inline) by managing not only 1 redraw flag but multiple redraws for volume, time, metadata, etc.
     def main_display(self):
+        self.oled.show()
         self.redraw = True
         x3=128
         while not self.doing_shutdown:
+
+            # DISPLAY PROCEDURE ON POWER ON
             if self.power:
-                self.oled.show()
-                if self.redraw:
+                if self.redraw_main_text:
                     with canvas(self.oled) as draw:
                         line1 = self.main_text
-                        if draw.textlength(line1, font=self.title_font) > 128:
+                        if draw.textlength(line1, font=self.title_font) > 128: #TODO just count the chars...
                             line1 = self.main_text + "    " + self.main_text + "    "
                         line2 = self.secondary_text
-                        if draw.textlength(line2, font=self.text_font) > 128:
+                        if draw.textlength(line2, font=self.text_font) > 128: #TODO just count the chars...
                             line2 = self.secondary_text + "       " + self.secondary_text + "       "
                     pause1 = 5 # Pause (5*0,2 = ~1s) avant de démarrer le scroll
                     pause2 = 5 # Pause (5*0,2 = ~1s) avant de démarrer le scroll
@@ -286,9 +292,14 @@ class PiWebRadioApp():
                     draw.text((0, self.icons_y_position), icontext, font=self.icons_font, fill="white")
 
                     # HEURE - TODO : Optimiser pour ne pas recalculer ça toutes les microsecondes.
-                    time_text = time.strftime("%H:%M")
-                    time_text_length = draw.textlength(time_text, font_size=15)
-                    draw.text((128 - time_text_length, self.icons_y_position - 2), time_text,  font_size=15, fill="white")
+                    #time_text = time.strftime("%H:%M")
+                    #time_text_length = draw.textlength(time_text, font_size=15)
+                    #draw.text((128 - time_text_length, self.icons_y_position - 2), time_text,  font_size=15, fill="white")
+
+                    # BATTERY STATUS TODO
+                    if self.redraw_battery:
+                        battery_text = f"{round(self.battery_percentage, 0)}%"
+                        draw.text((50, self.icons_y_position - 2), battery_text, font_size=15, fill="white")
 
                     # TITLES - TODO : ne calculer les textlength qu'une fois
                     l1_length = draw.textlength(line1, font=self.title_font) / 2
@@ -313,6 +324,7 @@ class PiWebRadioApp():
                 # Power mode refresh rate
                 time.sleep(self.__display_refresh_rate)
 
+            # DISPLAY PROCEDURE IN CLOCK MODE
             if self.clock:
                 self.oled.show()
                 time_text = time.strftime("%H:%M")
@@ -322,10 +334,10 @@ class PiWebRadioApp():
                     draw.text((x3 - time_text_length, self.icons_y_position - 2), time_text, font_size=15, fill="white")
                 x3-=5 # Vitesse de scroll de l'horloge
                 if x3 - time_text_length < 0:
-                    x3=128 #TODO : Défiler l'heure autour de l'écran
+                    x3=128 #TODO : Défiler l'heure autour de l'écran façon logo DVD :)
 
-                # Off mode refresh rate : one tick per second
-                time.sleep(1) # Si temps d'attente trop long, le display ne se met pas en marche avec la radio !
+                # Off mode refresh rate : one tick per second - longer means radio can turn on before the display changes.
+                time.sleep(1)
 
     def update_battery_status(self):
         vcellH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x03)
@@ -336,11 +348,12 @@ class PiWebRadioApp():
         self.battery_percentage = ((socH << 8) + socL) * 0.003906  # current electric quantity percentage
 
     # THREAD (WIP)
-    # TODO : Implement DFR0528 UPS Hat power management here. Currently unused.
+    #TODO : Add network signal monitor
     def power_monitor(self):
         self.power_alert = 0
         while not self.doing_shutdown:
             self.update_battery_status()
+            self.redraw_battery = True
             if ((self.battery_percentage < self.__battery_alert_limit)
                     and (self.battery_capacity <  self.__battery_charge_threshold)) :
                 self.power_alert += 1
@@ -354,7 +367,7 @@ class PiWebRadioApp():
                     os.system("sudo shutdown -h now")
             else:
                 self.power_alert = 0
-            time.sleep(60)
+            time.sleep(60) #TODO evaluate if a 60s refresh is enough to monitor battery percentage
 
     # API ROUTES
     def api_next_radio(self):
@@ -384,6 +397,7 @@ class PiWebRadioApp():
 
     def api_volume_up(self):
         self.volume = self.radio.volume_up()
+        self.redraw_volume = True
         response = {
             "volume" : self.volume
         }
@@ -391,6 +405,7 @@ class PiWebRadioApp():
 
     def api_volume_down(self):
         self.volume = self.radio.volume_down()
+        self.redraw_volume = True
         response = {
             "volume" : self.volume
         }
@@ -403,6 +418,7 @@ class PiWebRadioApp():
                 self.is_mute = True
             else:
                 self.is_mute = False
+            self.redraw_volume = True
         response = {
             "volume" : new_volume
         }
@@ -454,6 +470,7 @@ class PiWebRadioApp():
             response = {
                 "volume" : self.volume
             }
+            self.redraw_volume = True
             return response
         else:
             abort(400)
@@ -491,6 +508,7 @@ class PiWebRadioApp():
 
     def run_threads(self):
         self.threads = []
+        #TODO : Kill refresh threads when in clock mode?
         self.threads.append(threading.Thread(target=self.refresh_display_data, args=()))
         self.threads.append(threading.Thread(target=self.refresh_metadata, args=()))
         self.threads.append(threading.Thread(target=self.main_display, args=()))
