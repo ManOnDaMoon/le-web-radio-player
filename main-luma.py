@@ -367,6 +367,7 @@ class PiWebRadioApp():
         socL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x06)
         self.battery_capacity = (((vcellH & 0x0F) << 8) + vcellL) * 1.25  # capacity
         self.battery_percentage = ((socH << 8) + socL) * 0.003906  # current electric quantity percentage
+        self.redraw_battery = True
 
     # THREAD (WIP)
     #TODO : Add network signal monitor
@@ -388,7 +389,7 @@ class PiWebRadioApp():
                     os.system("sudo shutdown -h now")
             else:
                 self.power_alert = 0
-            time.sleep(60) #TODO evaluate if a 60s refresh is enough to monitor battery percentage
+            time.sleep(30) #TODO evaluate if a 60s refresh is enough to monitor battery percentage
 
     # API ROUTES
     def api_next_radio(self):
@@ -532,6 +533,7 @@ class PiWebRadioApp():
         self.threads.append(threading.Thread(target=self.refresh_display_data, args=()))
         self.threads.append(threading.Thread(target=self.refresh_metadata, args=()))
         self.threads.append(threading.Thread(target=self.main_display, args=()))
+        self.threads.append(threading.Thread(target=self.power_monitor, args=()))
         for thread in self.threads:
             thread.start()
 
