@@ -171,9 +171,11 @@ class PiWebRadioApp():
 
     def button_volume_up(self, rotary_encoder: RotaryEncoder):
         self.volume = self.radio.volume_up()
+        self.redraw_volume = True
 
     def button_volume_down(self, rotary_encoder: RotaryEncoder):
         self.volume = self.radio.volume_down()
+        self.redraw_volume = True
 
     def button_next_radio(self, rotary_encoder: RotaryEncoder):
         self.scroll_r_count+=1
@@ -283,8 +285,8 @@ class PiWebRadioApp():
                     if self.redraw_volume:
                         # TOP ICONS - TODO : Optimiser pour ne pas redessiner les icones si elles n'ont pas changé
                         icontext = self.get_volume_text()
-                        draw.text((0, self.icons_y_position), icontext, font=self.icons_font, fill="white")
                         self.redraw_volume = False
+                    draw.text((0, self.icons_y_position), icontext, font=self.icons_font, fill="white")
 
                     # HEURE - TODO : Optimiser pour ne pas recalculer ça toutes les microsecondes.
                     #time_text = time.strftime("%H:%M")
@@ -294,8 +296,8 @@ class PiWebRadioApp():
                     # BATTERY STATUS TODO
                     if self.redraw_battery:
                         battery_text = f"{round(self.battery_percentage, 0)}%"
-                        draw.text((100, self.icons_y_position - 2), battery_text, font_size=15, fill="white")
                         self.redraw_battery = False
+                    draw.text((100, self.icons_y_position - 2), battery_text, font_size=15, fill="white")
 
                     # REDRAW TEXT
                     if self.redraw_main_text:
@@ -318,7 +320,7 @@ class PiWebRadioApp():
                     # TITLES - TODO : ne calculer les textlength qu'une fois
                     if scroll1:
                         line1 = self.main_text + "      "
-                        if length1 + x1 < 0:
+                        if length1 + x1 < 64:
                             x1=0
                             pause1 = 20
                         draw.text((x1,self.title_y_position), line1, font=self.title_font, fill="white")
@@ -329,7 +331,7 @@ class PiWebRadioApp():
 
                     if scroll2:
                         line2 = self.secondary_text + "      "
-                        if (length2 + x2 < 0):
+                        if length2 + x2 < 64:
                             x2=0
                             pause2 = 20
                         draw.text((x2, self.text_y_position), line2, font=self.text_font, fill="white")
