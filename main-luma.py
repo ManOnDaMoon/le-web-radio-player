@@ -21,8 +21,7 @@ class PiWebRadioApp():
 
     __debug = False
     __data_refresh_rate: int = 2  # Time between two metadata API calls, in seconds
-    __display_refresh_rate: float = 0.2 # Time between two OLED screen refresh, in seconds
-    __last_display_refresh: float = 0.0 # Time since last display data refresh. Currently unused.
+    __display_refresh_rate: float = 0.25 # Time between two OLED screen refresh, in seconds
     __off_time_limit: int = 15*60 # Time limit after which the OS shuts down to save battery life, in seconds. Currently Unused.
     __off_time: float = 0 # Time since the radio has been toggled off
 
@@ -31,7 +30,7 @@ class PiWebRadioApp():
         # Initialisation DISPLAY
         self.serial = i2c(port=1, address=0x3C)
         self.oled = ssd1306(self.serial)
-        self.oled.contrast(128) #TODO Setup a contrast control
+        self.oled.contrast(100) #TODO Setup a contrast control
 
         # INIT UPS HAT
         self.__ups_addr = 0x10  # ups i2c address
@@ -156,16 +155,17 @@ class PiWebRadioApp():
         self.power = False
         self.clock = False
         self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"))
+        self.oled.hide()
         self.doing_shutdown = True
         for thread in self.threads:
             thread.join()
-        self.oled.hide()
 
     def total_shutdown(self, button):
         #Currently called in total_shutdown, api_shutdown, api_reboot, signal_handler
         self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Extinction totale par bouton physique")
         os.system("sudo shutdown -h now")
+        exit(0)
 
     def button_volume_up(self, rotary_encoder: RotaryEncoder):
         self.volume = self.radio.volume_up()
@@ -328,7 +328,7 @@ class PiWebRadioApp():
                             pause1 = 20
                         draw.text((x1,self.title_y_position), line1, font=self.title_font, fill="white")
                         if (pause1 < 0):
-                            x1-=1
+                            x1-=2
                         else:
                             pause1-=1
 
@@ -339,7 +339,7 @@ class PiWebRadioApp():
                             pause2 = 20
                         draw.text((x2, self.text_y_position), line2, font=self.text_font, fill="white")
                         if (pause2 < 0):
-                            x2-=2 # Vitesse de scroll double pour les titres
+                            x2-=4 # Vitesse de scroll double pour les titres
                         else:
                             pause2-=1
 
@@ -378,8 +378,7 @@ class PiWebRadioApp():
         while not self.doing_shutdown:
             self.update_battery_status()
             self.redraw_battery = True
-            if ((self.battery_percentage < self.__battery_alert_limit)
-                    and (self.battery_capacity <  self.__battery_charge_threshold)) :
+            if self.battery_percentage < self.__battery_alert_limit:
                 self.power_alert += 1
                 print(f"{time.ctime(time.time())} : LOW VOLTAGE ALERT #{self.power_alert}")
                 if self.power: #Sound only if currently running, else shut down silently
@@ -391,7 +390,7 @@ class PiWebRadioApp():
                 #    os.system("sudo shutdown -h now")
             else:
                 self.power_alert = 0
-            time.sleep(30) #TODO evaluate if a 60s refresh is enough to monitor battery percentage
+            time.sleep(15)
 
     # API ROUTES
     def api_next_radio(self):
@@ -460,13 +459,13 @@ class PiWebRadioApp():
         self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Extinction totale par API")
         os.system("sudo shutdown -h now")
-        return "Extinction totale en cours"
+        exit(0)
 
     def api_reboot(self):
         self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Reboot par API")
         os.system("sudo reboot")
-        return "Reboot en cours"
+        exit(0)
 
     def api_list_radio(self):
         channels = []
