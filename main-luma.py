@@ -276,23 +276,13 @@ class PiWebRadioApp():
 
             # DISPLAY PROCEDURE ON POWER ON
             if self.power:
-                if self.redraw_main_text:
-                    with canvas(self.oled) as draw:
-                        line1 = self.main_text
-                        if draw.textlength(line1, font=self.title_font) > 128: #TODO just count the chars...
-                            line1 = self.main_text + "    " + self.main_text + "    "
-                        line2 = self.secondary_text
-                        if draw.textlength(line2, font=self.text_font) > 128: #TODO just count the chars...
-                            line2 = self.secondary_text + "       " + self.secondary_text + "       "
-                    pause1 = 5 # Pause (5*0,2 = ~1s) avant de démarrer le scroll
-                    pause2 = 5 # Pause (5*0,2 = ~1s) avant de démarrer le scroll
-                    x1 = 0
-                    x2 = 0
-                    self.redraw = False
-                icontext = self.get_volume_text()
                 with canvas(self.oled) as draw:
-                    # TOP ICONS - TODO : Optimiser pour ne pas redessiner les icones si elles n'ont pas changé
-                    draw.text((0, self.icons_y_position), icontext, font=self.icons_font, fill="white")
+
+                    if self.redraw_volume:
+                        # TOP ICONS - TODO : Optimiser pour ne pas redessiner les icones si elles n'ont pas changé
+                        icontext = self.get_volume_text()
+                        draw.text((0, self.icons_y_position), icontext, font=self.icons_font, fill="white")
+                        self.redraw_volume = False
 
                     # HEURE - TODO : Optimiser pour ne pas recalculer ça toutes les microsecondes.
                     #time_text = time.strftime("%H:%M")
@@ -302,27 +292,49 @@ class PiWebRadioApp():
                     # BATTERY STATUS TODO
                     if self.redraw_battery:
                         battery_text = f"{round(self.battery_percentage, 0)}%"
-                        draw.text((50, self.icons_y_position - 2), battery_text, font_size=15, fill="white")
+                        draw.text((100, self.icons_y_position - 2), battery_text, font_size=15, fill="white")
+                        self.redraw_battery = False
 
+                    # REDRAW TEXT
+                    if self.redraw_main_text:
+                        length1 = draw.textlength(self.main_text, font=self.title_font)
+                        if length1 > 128:
+                            scroll1 = True
+                        pause1 = 5  # Pause (5*0,2 = ~1s) avant de démarrer le scroll
+                        x1 = 0
+                        self.redraw_main_text = False
+
+                    if self.redraw_secondary_text:
+                        length2 = draw.textlength(self.secondary_text, font=self.text_font)
+                        if length2 > 128:
+                            scroll2 = True
+                        pause2 = 5  # Pause (5*0,2 = ~1s) avant de démarrer le scroll
+                        x2 = 0
+                        self.redraw_secondary_text = False
+
+                    # SCROLLING - TODO Only if text is too long
                     # TITLES - TODO : ne calculer les textlength qu'une fois
-                    l1_length = draw.textlength(line1, font=self.title_font) / 2
-                    l2_length = draw.textlength(line2, font=self.text_font) / 2
-                    if (l1_length <= 128) or (l1_length + x1 < 0):
-                        x1=0
-                        pause1 = 20
-                    draw.text((x1,self.title_y_position), line1, font=self.title_font, fill="white")
-                    if (l2_length <= 128) or (l2_length + x2 < 0):
-                        x2=0
-                        pause2 = 20
-                    draw.text((x2, self.text_y_position), line2, font=self.text_font, fill="white")
-                if (pause1 < 0):
-                    x1-=1
-                else:
-                    pause1-=1
-                if (pause2 < 0):
-                    x2-=2 # Vitesse de scroll double pour les titres
-                else:
-                    pause2-=1
+                    if scroll1:
+                        line1 = self.main_text + "      "
+                        if length1 + x1 < 0:
+                            x1=0
+                            pause1 = 20
+                        draw.text((x1,self.title_y_position), line1, font=self.title_font, fill="white")
+                        if (pause1 < 0):
+                            x1-=1
+                        else:
+                            pause1-=1
+
+                    if scroll2:
+                        line2 = self.secondary_text + "      "
+                        if (length2 + x2 < 0):
+                            x2=0
+                            pause2 = 20
+                        draw.text((x2, self.text_y_position), line2, font=self.text_font, fill="white")
+                        if (pause2 < 0):
+                            x2-=2 # Vitesse de scroll double pour les titres
+                        else:
+                            pause2-=1
 
                 # Power mode refresh rate
                 time.sleep(self.__display_refresh_rate)
