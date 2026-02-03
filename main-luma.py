@@ -36,7 +36,7 @@ class PiWebRadioApp():
         # INIT UPS HAT
         self.__ups_addr = 0x10  # ups i2c address
         self.__ups_bus = SMBus(1)  # i2c-port 1
-        self.__battery_alert_limit = 10.0 # Raise power alert if below 10%
+        self.__battery_alert_limit = 7.0 # Raise power alert if below 10%
         self.__battery_charge_threshold = 4000 # Capacity above 4000mV is charging
         self.battery_capacity = 0.0
         self.battery_percentage = 0.0
@@ -383,10 +383,10 @@ class PiWebRadioApp():
                 if self.power: #Sound only if currently running, else shut down silently
                     os.popen("espeak -v fr+f1 -s 120 \"Batterie faible\" --stdout | aplay")
                 self.display_splash(os.path.join(self.__script_dir_name, "lowpower.bmp"))
-                if self.power_alert >= 3:
-                    self.shutdown_tasks()
-                    print(f"{time.ctime(time.time())} : Batterie trop faible")
-                    os.system("sudo shutdown -h now")
+                #if self.power_alert >= 3:
+                #    self.shutdown_tasks()
+                #    print(f"{time.ctime(time.time())} : Batterie trop faible")
+                #    os.system("sudo shutdown -h now")
             else:
                 self.power_alert = 0
             time.sleep(30) #TODO evaluate if a 60s refresh is enough to monitor battery percentage
