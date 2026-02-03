@@ -267,7 +267,10 @@ class PiWebRadioApp():
     # TODO: Improve performance (see other todos inline) by managing not only 1 redraw flag but multiple redraws for volume, time, metadata, etc.
     def main_display(self):
         self.oled.show()
-        self.redraw = True
+        self.redraw_main_text = True
+        self.redraw_secondary_text = True
+        self.redraw_volume = True
+        self.redraw_battery = True
         x3=128
         while not self.doing_shutdown:
 
