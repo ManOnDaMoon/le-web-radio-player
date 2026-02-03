@@ -33,7 +33,7 @@ class PiWebRadioApp():
         self.oled = ssd1306(self.serial)
         self.oled.contrast(128) #TODO Setup a contrast control
 
-        # TODO: Init UPS hat
+        # INIT UPS HAT
         self.__ups_addr = 0x10  # ups i2c address
         self.__ups_bus = SMBus(1)  # i2c-port 1
         self.__battery_alert_limit = 10.0 # Raise power alert if below 10%
@@ -57,8 +57,6 @@ class PiWebRadioApp():
         self.doing_shutdown = False # OS Shutdown in progress indicator
         self.power_alert = 0 # Power alert indicator
         self.clock = True # Clock mode indicator
-        #TODO : Init all redraw flags
-        self.redraw = True # Force redraw indicator
         self.radio = Radio(self.__debug) # The actual radio object
         # OLED display fonts, loaded just once:
         self.icons_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "radiocontrols.ttf"), 16)
@@ -227,7 +225,9 @@ class PiWebRadioApp():
                     self.redraw_main_text = True
                 if (old_secondary_text != self.secondary_text):
                     self.redraw_secondary_text = True
-            time.sleep(self.__data_refresh_rate)
+                time.sleep(self.__data_refresh_rate)
+            else:
+                time.sleep(1)
 
     # THREAD
     # While currently running, regularly poll metadata API.
@@ -237,7 +237,9 @@ class PiWebRadioApp():
         while not self.doing_shutdown:
             if self.power:
                 self.radio.current_channel.fetch_metadata()
-            time.sleep(self.__data_refresh_rate)
+                time.sleep(self.__data_refresh_rate)
+            else:
+                time.sleep(1)
 
     # Draws the volume icons according to volume
     def get_volume_text(self) -> str:
@@ -266,7 +268,6 @@ class PiWebRadioApp():
 
     # THREAD
     # This thread handles the OLED drawing procedures
-    # TODO: Improve performance (see other todos inline) by managing not only 1 redraw flag but multiple redraws for volume, time, metadata, etc.
     def main_display(self):
         self.oled.show()
         self.redraw_main_text = True
@@ -282,8 +283,8 @@ class PiWebRadioApp():
             if self.power:
                 with canvas(self.oled) as draw:
 
+                    # TOP ICONS
                     if self.redraw_volume:
-                        # TOP ICONS - TODO : Optimiser pour ne pas redessiner les icones si elles n'ont pas changé
                         icontext = self.get_volume_text()
                         self.redraw_volume = False
                     draw.text((0, self.icons_y_position), icontext, font=self.icons_font, fill="white")
@@ -293,7 +294,7 @@ class PiWebRadioApp():
                     #time_text_length = draw.textlength(time_text, font_size=15)
                     #draw.text((128 - time_text_length, self.icons_y_position - 2), time_text,  font_size=15, fill="white")
 
-                    # BATTERY STATUS TODO
+                    # BATTERY STATUS
                     if self.redraw_battery:
                         battery_text = f"{round(self.battery_percentage)}%"
                         xbatt = 128 - draw.textlength(battery_text, font_size=15)
@@ -317,8 +318,8 @@ class PiWebRadioApp():
                         x2 = 0
                         self.redraw_secondary_text = False
 
-                    # SCROLLING - TODO Only if text is too long
-                    # TITLES - TODO : ne calculer les textlength qu'une fois
+                    # SCROLLING
+                    # TITLES
                     if scroll1:
                         line1 = self.main_text + "      "
                         if length1 + x1 < 64:
@@ -528,7 +529,6 @@ class PiWebRadioApp():
 
     def run_threads(self):
         self.threads = []
-        #TODO : Kill refresh threads when in clock mode?
         self.threads.append(threading.Thread(target=self.refresh_display_data, args=()))
         self.threads.append(threading.Thread(target=self.refresh_metadata, args=()))
         self.threads.append(threading.Thread(target=self.main_display, args=()))
