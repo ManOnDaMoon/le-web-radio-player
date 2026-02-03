@@ -19,7 +19,7 @@ from radio import Radio
 
 class PiWebRadioApp():
 
-    __debug = True
+    __debug = False
     __data_refresh_rate: int = 2  # Time between two metadata API calls, in seconds
     __display_refresh_rate: float = 0.2 # Time between two OLED screen refresh, in seconds
     __last_display_refresh: float = 0.0 # Time since last display data refresh. Currently unused.
@@ -198,6 +198,7 @@ class PiWebRadioApp():
                 self.is_mute = True
             else:
                 self.is_mute = False
+            self.redraw_volume = True
 
     # Catches SIGINT, SIGTERM, SIGHUP and terminates all threads properly
     def signal_handler(self, signal, frame):
@@ -347,7 +348,6 @@ class PiWebRadioApp():
 
             # DISPLAY PROCEDURE IN CLOCK MODE
             if self.clock:
-                self.oled.show()
                 time_text = time.strftime("%H:%M")
                 with canvas(self.oled) as draw:
                     # HEURE
@@ -369,8 +369,10 @@ class PiWebRadioApp():
         self.battery_percentage = ((socH << 8) + socL) * 0.003906  # current electric quantity percentage
         self.redraw_battery = True
 
-    # THREAD (WIP)
+    # THREAD
+    # BATTERY MANAGEMENT
     #TODO : Add network signal monitor
+    #TODO : Detect charging (how?) - Or remove threshold comparison
     def power_monitor(self):
         self.power_alert = 0
         while not self.doing_shutdown:
