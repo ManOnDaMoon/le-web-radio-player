@@ -124,13 +124,13 @@ class PiWebRadioApp():
                 virtual.set_position((x, y))
                 x += 2
 
-    def display_splash(self, image_path, wait_time = 1):
+    def display_splash(self, image_path, wait_time = 0):
         splash = Image.open(image_path).convert('RGBA')
         splash = splash.convert(self.oled.mode)
         w, h = splash.size
         self.splash_virtual = viewport(self.oled, width=w, height=h)
         self.splash_virtual.display(splash)
-        time.sleep(wait_time) #T0D0 : Find another way to lock splash in place
+        time.sleep(wait_time) # TODO : Find another way to lock splash in place
 
     def on_off_released(self, button):
         if not button.was_held:
@@ -161,7 +161,7 @@ class PiWebRadioApp():
             thread.join()
 
     def total_shutdown(self, button):
-        #Currently called in total_shutdown, api_shutdown, api_reboot, signal_handler
+        button.was_held = True
         self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Extinction totale par bouton physique")
         os.system("sudo shutdown -h now")
