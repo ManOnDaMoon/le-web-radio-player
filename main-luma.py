@@ -154,9 +154,9 @@ class PiWebRadioApp():
         self.radio.stop()
         self.power = False
         self.clock = False
+        self.doing_shutdown = True
         self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"))
         self.oled.hide()
-        self.doing_shutdown = True
         for thread in self.threads:
             thread.join()
 
@@ -305,16 +305,14 @@ class PiWebRadioApp():
                     # REDRAW TEXT
                     if self.redraw_main_text:
                         length1 = draw.textlength(self.main_text, font=self.title_font)
-                        if length1 > 128:
-                            scroll1 = True
+                        scroll1 = (length1 > 128)
                         pause1 = 5  # Pause (5*0,2 = ~1s) avant de démarrer le scroll
                         x1 = 0
                         self.redraw_main_text = False
 
                     if self.redraw_secondary_text:
                         length2 = draw.textlength(self.secondary_text, font=self.text_font)
-                        if length2 > 128:
-                            scroll2 = True
+                        scroll2 = (length2 > 128)
                         pause2 = 5  # Pause (5*0,2 = ~1s) avant de démarrer le scroll
                         x2 = 0
                         self.redraw_secondary_text = False
@@ -328,9 +326,11 @@ class PiWebRadioApp():
                             pause1 = 20
                         draw.text((x1,self.title_y_position), line1, font=self.title_font, fill="white")
                         if (pause1 < 0):
-                            x1-=2
+                            x1-=3
                         else:
                             pause1-=1
+                    else:
+                        draw.text((0,self.title_y_position), self.main_text, font=self.title_font, fill="white")
 
                     if scroll2:
                         line2 = self.secondary_text + "      "
@@ -339,9 +339,11 @@ class PiWebRadioApp():
                             pause2 = 20
                         draw.text((x2, self.text_y_position), line2, font=self.text_font, fill="white")
                         if (pause2 < 0):
-                            x2-=4 # Vitesse de scroll double pour les titres
+                            x2-=6 # Vitesse de scroll double pour les titres
                         else:
                             pause2-=1
+                    else:
+                        draw.text((0,self.text_y_position), self.secondary_text, font=self.text_font, fill="white")
 
                 # Power mode refresh rate
                 time.sleep(self.__display_refresh_rate)
