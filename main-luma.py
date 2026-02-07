@@ -31,7 +31,7 @@ class PiWebRadioApp():
         # Initialisation DISPLAY
         self.serial = i2c(port=1, address=0x3C)
         self.oled = ssd1306(self.serial)
-        self.oled.contrast(100) #TODO Setup a contrast control
+        self.oled.contrast(50) #TODO Setup a contrast control
 
         # INIT UPS HAT
         self.__ups_addr = 0x10  # ups i2c address
@@ -362,13 +362,13 @@ class PiWebRadioApp():
             if self.clock:
                 time_text = time.strftime("%H:%M")
                 with canvas(self.oled) as draw:
-                    time_text_length = draw.textlength(time_text, font_size=15)
+                    time_text_length = draw.textlength(time_text, font_size=16)
                     draw.text((x3, y3), time_text, font_size=15, fill="white")
                 x3+=x3increment
                 y3+=y3increment
                 if x3 <= 0 or x3 + time_text_length > 127:
                     x3increment=-x3increment
-                if y3 <= 0 or y3 + 15 > 63:
+                if y3 <= 0 or y3 + 16 > 63:
                     y3increment=-y3increment
                 # Off mode refresh rate : one tick per second - longer means radio can turn on before the display changes.
                 time.sleep(1)
