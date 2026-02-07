@@ -6,6 +6,7 @@
 
 - 1x Raspberry Pi Zero 2W
 - 1x Waveshare Audio Hat WM8960
+- 1x DFRobot 0528 UPS HAT + une batterie Lithium 3.7V avec connecteur Ph2
 - 2x AZDelivery KY-040 Rotary Encoder Module
 - 1x écran OLED I2C 0,96" 128x64px
 
@@ -102,12 +103,6 @@ python main.py
 ```
 La radio fonctionne !
 
-Si besoin, ajout crontab et log pour lancement au démarrage du RPi :
-`sudo crontab -e`
-
-Ajouter la ligne :
-`@reboot python /home/user/le-web-radio-player/main-luma.py >> /home/user/cron.log 2>&1`
-
 ### Modifier le Volume par défaut :
 `sudo nano /etc/wm8960-soundcard/wm8960_asound.state`
 Et modifier la valeur value.0 et value.1 :
@@ -130,9 +125,6 @@ control.13 {
         }
 ```
 
-Installer eSpeak pour la gestion des alertes batterie
-`sudo apt install espeak -y`
-
 Installer la dernière version de Pillow pour la manipulation d’image - dirty, mais fonctionne :
 ```
 sudo apt install pip -y
@@ -143,6 +135,54 @@ pip3 install --user --upgrade --break-system-packages pillow
 Installer Flask pour l'API web (potentiellement déjà installé)
 ```
 sudo apt install python3-flask
+```
+
+Installer Waitress comme serveur pour Flask
+```
+sudo apt install python3-waitress
+```
+
+Pour interroger le pourcentage de batterie sur le DFR0528
+```
+ sudo apt install python3-smbus
+ ```
+
+### Lancement du script au démarrage via systemd
+
+```
+sudo nano /etc/systemd/system/myradio.service
+```
+
+Renseigner le fichier suivant, en modifiant le chemin vers le script `main-luma.py` :
+```
+[Unit]
+Description=Le Web Radio Player
+After=sound.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/user/le-web-radio-player/main-luma.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Puis exécuter :
+```
+sudo systemctl daemon-reload
+sudo systemctl enable myradio
+```
+
+Rebooter pour vérifier le fonctionnement.
+
+Pour débugger :
+```
+sudo systemctl status myradio
+journalctl -u myradio.service -e
 ```
 
 # Web API
@@ -224,4 +264,8 @@ Lancer un `sudo shutdown -h now` pour éteindre le RPi.
 
 Lancer un `sudo reboot` pour redémarrer le RPi.
 
-Lancer un reboot
+### Battery
+
+`myradio.local/battery`
+
+Obtenir l'état de la batterie en %

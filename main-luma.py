@@ -5,6 +5,7 @@ from gpiozero import Button, RotaryEncoder
 import requests
 import threading
 from flask import Flask, request, abort
+from waitress import serve
 
 from luma.core.interface.serial import i2c
 from luma.core.render import canvas
@@ -284,8 +285,8 @@ class PiWebRadioApp():
         scroll2 = False
         x3=0
         y3=0
-        x3increment=5
-        y3increment=5
+        x3increment=4
+        y3increment=4
 
         while not self.doing_shutdown:
 
@@ -365,9 +366,9 @@ class PiWebRadioApp():
                     draw.text((x3, y3), time_text, font_size=15, fill="white")
                 x3+=x3increment
                 y3+=y3increment
-                if x3 <= 0 or x3 + time_text_length >= 128:
+                if x3 <= 0 or x3 + time_text_length > 127:
                     x3increment=-x3increment
-                if y3 <= 0 or y3 + 15 >= 64:
+                if y3 <= 0 or y3 + 15 > 63:
                     y3increment=-y3increment
                 # Off mode refresh rate : one tick per second - longer means radio can turn on before the display changes.
                 time.sleep(1)
@@ -538,7 +539,8 @@ class PiWebRadioApp():
         self.api.add_url_rule("/switch", view_func=self.api_switch_radio)
         self.api.add_url_rule("/title", view_func=self.api_get_title)
         self.api.add_url_rule("/battery", view_func=self.api_get_battery)
-        self.api.run(host="0.0.0.0", port=80, debug=self.__debug, use_reloader=False)
+        serve(self.api, host="0.0.0.0", port=80)
+        #self.api.run(host="0.0.0.0", port=80, debug=self.__debug, use_reloader=False)
 
     def run_threads(self):
         self.threads.append(threading.Thread(target=self.refresh_display_data, args=()))
