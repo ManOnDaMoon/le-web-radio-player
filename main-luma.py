@@ -35,7 +35,7 @@ class PiWebRadioApp():
         # INIT UPS HAT
         self.__ups_addr = 0x10  # ups i2c address
         self.__ups_bus = SMBus(1)  # i2c-port 1
-        self.__battery_alert_limit = 7.0 # Raise power alert if below 10%
+        self.__battery_alert_limit = 10.0 # Raise power alert if below 10%
         self.__battery_charge_threshold = 4000 # Capacity above 4000mV is charging
         self.battery_capacity = 0.0
         self.battery_percentage = 0.0
@@ -277,30 +277,33 @@ class PiWebRadioApp():
         self.redraw_battery = True
         scroll1 = False
         scroll2 = False
-        x3=128
+        x3=0
+        y3=0
+        x3increment=5
+        y3increment=5
+
         while not self.doing_shutdown:
 
             # DISPLAY PROCEDURE ON POWER ON
             if self.power:
                 with canvas(self.oled) as draw:
 
+                    # BATTERY STATUS
+                    if self.redraw_battery:
+                        if self.power_alert > 0:
+                            self.display_splash(os.path.join(self.__script_dir_name, "lowpower.bmp"), 5)
+                            self.power_alert = 0
+                            continue
+                        battery_text = f"{round(self.battery_percentage)}%"
+                        xbatt = 128 - draw.textlength(battery_text, font_size=15)
+                        self.redraw_battery = False
+                    draw.text((xbatt, self.icons_y_position - 2), battery_text, font_size=15, fill="white")
+
                     # TOP ICONS
                     if self.redraw_volume:
                         icontext = self.get_volume_text()
                         self.redraw_volume = False
                     draw.text((0, self.icons_y_position), icontext, font=self.icons_font, fill="white")
-
-                    # HEURE - TODO : Optimiser pour ne pas recalculer ça toutes les microsecondes.
-                    #time_text = time.strftime("%H:%M")
-                    #time_text_length = draw.textlength(time_text, font_size=15)
-                    #draw.text((128 - time_text_length, self.icons_y_position - 2), time_text,  font_size=15, fill="white")
-
-                    # BATTERY STATUS
-                    if self.redraw_battery:
-                        battery_text = f"{round(self.battery_percentage)}%"
-                        xbatt = 128 - draw.textlength(battery_text, font_size=15)
-                        self.redraw_battery = False
-                    draw.text((xbatt, self.icons_y_position - 2), battery_text, font_size=15, fill="white")
 
                     # REDRAW TEXT
                     if self.redraw_main_text:
@@ -349,16 +352,18 @@ class PiWebRadioApp():
                 time.sleep(self.__display_refresh_rate)
 
             # DISPLAY PROCEDURE IN CLOCK MODE
+            # Display time bouncing on the screen
             if self.clock:
                 time_text = time.strftime("%H:%M")
                 with canvas(self.oled) as draw:
-                    # HEURE
                     time_text_length = draw.textlength(time_text, font_size=15)
-                    draw.text((x3 - time_text_length, self.icons_y_position - 2), time_text, font_size=15, fill="white")
-                x3-=5 # Vitesse de scroll de l'horloge
-                if x3 - time_text_length < 0:
-                    x3=128 #TODO : Défiler l'heure autour de l'écran façon logo DVD :)
-
+                    draw.text((x3, y3), time_text, font_size=15, fill="white")
+                x3+=x3increment
+                y3+=y3increment
+                if x3 <= 0 or x3 + time_text_length >= 128:
+                    x3increment=-x3increment
+                if y3 <= 0 or y3 + 15 >= 64:
+                    y3increment=-y3increment
                 # Off mode refresh rate : one tick per second - longer means radio can turn on before the display changes.
                 time.sleep(1)
 
@@ -374,25 +379,24 @@ class PiWebRadioApp():
     # THREAD
     # BATTERY MANAGEMENT
     #TODO : Add network signal monitor
-    #TODO : Detect charging (how?) - Or remove threshold comparison
     def power_monitor(self):
-        self.power_alert = 0
         while not self.doing_shutdown:
             self.update_battery_status()
             self.redraw_battery = True
-            if self.battery_percentage < self.__battery_alert_limit:
-                self.power_alert += 1
-                print(f"{time.ctime(time.time())} : LOW VOLTAGE ALERT #{self.power_alert}")
-                if self.power: #Sound only if currently running, else shut down silently
-                    os.popen("espeak -v fr+f1 -s 120 \"Batterie faible\" --stdout | aplay")
-                self.display_splash(os.path.join(self.__script_dir_name, "lowpower.bmp"))
-                #if self.power_alert >= 3:
-                #    self.shutdown_tasks()
-                #    print(f"{time.ctime(time.time())} : Batterie trop faible")
-                #    os.system("sudo shutdown -h now")
+            if self.battery_percentage <= self.__battery_alert_limit:
+                self.power_alert = 1
+                print(f"{time.ctime(time.time())} : Alerte batterie faible {self.battery_percentage}")
+                if self.battery_percentage <= 7.0:
+                    self.shutdown_tasks()
+                    print(f"{time.ctime(time.time())} : Extinction batterie faible")
+                    os.system("sudo shutdown -h now")
             else:
                 self.power_alert = 0
-            time.sleep(15)
+            if self.power:
+                time.sleep(20)
+            else:
+                time.sleep(60)
+
 
     # API ROUTES
     def api_next_radio(self):
@@ -544,6 +548,7 @@ class PiWebRadioApp():
         self.daemons.append(threading.Thread(target=self.run_api, args=(), daemon=True))
         for daemon in self.daemons:
             daemon.start()
+
 
 
 #
