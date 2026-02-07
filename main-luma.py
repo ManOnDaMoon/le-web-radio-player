@@ -93,6 +93,9 @@ class PiWebRadioApp():
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGHUP, self.signal_handler)
 
+        self.daemons = []
+        self.threads = []
+
         # TODO : Display a specific information or replace with an Offline mode detection
         self.wait_for_internet_connection()
 
@@ -130,7 +133,7 @@ class PiWebRadioApp():
         w, h = splash.size
         self.splash_virtual = viewport(self.oled, width=w, height=h)
         self.splash_virtual.display(splash)
-        time.sleep(wait_time) # TODO : Find another way to lock splash in place
+        time.sleep(wait_time) # Does not lock splash in place if not called from display thread
 
     def on_off_released(self, button):
         if not button.was_held:
@@ -155,10 +158,17 @@ class PiWebRadioApp():
         self.power = False
         self.clock = False
         self.doing_shutdown = True
-        self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"))
+        self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"), 2)
         self.oled.hide()
+
         for thread in self.threads:
             thread.join()
+
+    # Catches SIGINT, SIGTERM, SIGHUP and terminates all threads properly
+    def signal_handler(self, signal, frame):
+        if not self.doing_shutdown: # Only if unexpected shutdown only
+            self.shutdown_tasks()
+            exit(0)
 
     def total_shutdown(self, button):
         button.was_held = True
@@ -199,11 +209,6 @@ class PiWebRadioApp():
             else:
                 self.is_mute = False
             self.redraw_volume = True
-
-    # Catches SIGINT, SIGTERM, SIGHUP and terminates all threads properly
-    def signal_handler(self, signal, frame):
-        if not self.doing_shutdown: # Only if unexpected shutdown only
-            self.shutdown_tasks()
 
     # Forces a custom text to be displayed immediately in front of the metadata text
     def show_text(self, text, secondary_text = "") -> None:
@@ -536,20 +541,15 @@ class PiWebRadioApp():
         self.api.run(host="0.0.0.0", port=80, debug=self.__debug, use_reloader=False)
 
     def run_threads(self):
-        self.threads = []
         self.threads.append(threading.Thread(target=self.refresh_display_data, args=()))
         self.threads.append(threading.Thread(target=self.refresh_metadata, args=()))
         self.threads.append(threading.Thread(target=self.main_display, args=()))
         self.threads.append(threading.Thread(target=self.power_monitor, args=()))
+        self.daemons.append(threading.Thread(target=self.run_api, args=(), daemon=True))
         for thread in self.threads:
             thread.start()
-
-        self.daemons = []
-        self.daemons.append(threading.Thread(target=self.run_api, args=(), daemon=True))
         for daemon in self.daemons:
             daemon.start()
-
-
 
 #
 # Main loop
