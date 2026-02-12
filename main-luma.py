@@ -297,8 +297,11 @@ class PiWebRadioApp():
                     # BATTERY STATUS
                     if self.redraw_battery:
                         if self.power_alert > 0:
+                            old_volume = self.radio.volume
+                            self.radio.set_volume(0)
                             self.display_splash(os.path.join(self.__script_dir_name, "lowpower.bmp"), 5)
                             self.power_alert = 0
+                            self.radio.set_volume(old_volume)
                             continue
                         battery_text = f"{round(self.battery_percentage)}%"
                         xbatt = 128 - draw.textlength(battery_text, font_size=15)
@@ -393,13 +396,12 @@ class PiWebRadioApp():
                 self.power_alert = 1
                 print(f"{time.ctime(time.time())} : Alerte batterie faible {self.battery_percentage}")
                 if self.battery_percentage <= 7.0:
-                    self.shutdown_tasks()
                     print(f"{time.ctime(time.time())} : Extinction batterie faible")
                     os.system("sudo shutdown -h now")
             else:
                 self.power_alert = 0
             if self.power:
-                time.sleep(20)
+                time.sleep(30)
             else:
                 time.sleep(60)
 
