@@ -37,9 +37,13 @@ class PiWebRadioApp():
         self.__ups_addr = 0x10  # ups i2c address
         self.__ups_bus = SMBus(1)  # i2c-port 1
         self.__battery_alert_limit = 10.0 # Raise power alert if below 10%
-        self.__battery_charge_threshold = 4000 # Capacity above 4000mV is charging
         self.battery_capacity = 0.0
+        self.old_battery_capacity = 0.0
+        self.old_battery_percentage = 0.0
+        self.battery_charging = False
+        self.old_battery_charging = False
         self.battery_percentage = 0.0
+        self.battery_alert_time = 0.0
         self.update_battery_status()
 
         self.__script_dir_name = os.path.dirname(__file__)
@@ -377,13 +381,22 @@ class PiWebRadioApp():
                 time.sleep(1)
 
     def update_battery_status(self):
+        self.old_battery_capacity = self.battery_capacity
+        self.old_battery_percentage = self.battery_percentage
+        self.old_battery_charging = self.battery_charging
+
         vcellH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x03)
         vcellL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x04)
         socH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x05)
         socL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x06)
+
         self.battery_capacity = (((vcellH & 0x0F) << 8) + vcellL) * 1.25  # capacity
         self.battery_percentage = ((socH << 8) + socL) * 0.003906  # current electric quantity percentage
-        self.redraw_battery = True
+        self.battery_charging = self.battery_capacity > self.old_battery_capacity
+
+        if ((round(self.battery_percentage) != round(self.old_battery_percentage))
+                or (self.battery_charging != self.old_battery_charging)):
+            self.redraw_battery = True
 
     # THREAD
     # BATTERY MANAGEMENT
@@ -391,16 +404,18 @@ class PiWebRadioApp():
     def power_monitor(self):
         while not self.doing_shutdown:
             self.update_battery_status()
-            self.redraw_battery = True
-            if self.battery_percentage <= self.__battery_alert_limit:
+            if ((not self.battery_charging)
+                and (self.battery_percentage <= self.__battery_alert_limit)
+                and (time.time() > self.battery_alert_time + 60)) :
                 self.power_alert = 1
-                print(f"{time.ctime(time.time())} : Alerte batterie faible {self.battery_percentage}")
+                self.battery_alert_time = time.time()
+                print(f"{time.ctime(self.battery_alert_time)} : Alerte batterie faible {self.battery_percentage}")
                 if self.battery_percentage <= 7.0:
-                    print(f"{time.ctime(time.time())} : Extinction batterie faible")
+                    print(f"{time.ctime(self.battery_alert_time)} : Extinction batterie faible")
                     os.system("sudo shutdown -h now")
             else:
                 self.power_alert = 0
-            time.sleep(60)
+            time.sleep(1)
 
 
     # API ROUTES
