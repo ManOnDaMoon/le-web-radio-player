@@ -307,8 +307,9 @@ class PiWebRadioApp():
                             self.power_alert = 0
                             self.radio.set_volume(old_volume)
                             continue
+                        battery_text = ""
                         if (self.battery_charging):
-                            battery_text = "⚡︎"
+                            battery_text += "⚡︎"
                         battery_text += f"{round(self.battery_percentage)}%"
                         xbatt = 128 - draw.textlength(battery_text, font_size=15)
                         self.redraw_battery = False
