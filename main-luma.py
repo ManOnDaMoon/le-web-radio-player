@@ -20,7 +20,7 @@ from radio import Radio
 
 class PiWebRadioApp():
 
-    __debug = False
+    __debug = True
     __data_refresh_rate: int = 2  # Time between two metadata API calls, in seconds
     __display_refresh_rate: float = 0.25 # Time between two OLED screen refresh, in seconds
     __off_time_limit: int = 15*60 # Time limit after which the OS shuts down to save battery life, in seconds. Currently Unused.
@@ -407,7 +407,8 @@ class PiWebRadioApp():
     def power_monitor(self):
         while not self.doing_shutdown:
             self.update_battery_status()
-            print(f"{time.time()} : {self.battery_percentage}")
+            if self.__debug:
+                print(f"{time.ctime(self.battery_alert_time)} : Pourcentage : {self.battery_percentage} - Capacité : {self.battery_capacity}")
             if ((not self.battery_charging)
                 and (self.battery_percentage <= self.__battery_alert_limit)
                 and (time.time() > self.battery_alert_time + 60)) :
