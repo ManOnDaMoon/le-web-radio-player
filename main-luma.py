@@ -20,7 +20,7 @@ from radio import Radio
 
 class PiWebRadioApp():
 
-    __debug = True
+    __debug = False
     __data_refresh_rate: int = 2  # Time between two metadata API calls, in seconds
     __display_refresh_rate: float = 0.25 # Time between two OLED screen refresh, in seconds
     __off_time_limit: int = 15*60 # Time limit after which the OS shuts down to save battery life, in seconds. Currently Unused.
@@ -38,10 +38,6 @@ class PiWebRadioApp():
         self.__ups_bus = SMBus(1)  # i2c-port 1
         self.__battery_alert_limit = 10.0 # Raise power alert if below 10%
         self.battery_capacity = 0.0
-        self.old_battery_capacity = 0.0
-        self.old_battery_percentage = 0.0
-        self.battery_charging = False
-        self.old_battery_charging = False
         self.battery_percentage = 0.0
         self.battery_alert_time = 0.0
         self.update_battery_status()
@@ -179,7 +175,7 @@ class PiWebRadioApp():
         button.was_held = True
         self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Extinction totale par bouton physique")
-        os.system("sudo shutdown -h now")
+        os.system("sudo systemctl power off")
         exit(0)
 
     def button_volume_up(self, rotary_encoder: RotaryEncoder):
@@ -307,10 +303,7 @@ class PiWebRadioApp():
                             self.power_alert = 0
                             self.radio.set_volume(old_volume)
                             continue
-                        battery_text = ""
-                        if (self.battery_charging):
-                            battery_text += "⚡︎"
-                        battery_text += f"{round(self.battery_percentage)}%"
+                        battery_text = f"{round(self.battery_percentage)}%"
                         xbatt = 128 - draw.textlength(battery_text, font_size=15)
                         self.redraw_battery = False
                     draw.text((xbatt, self.icons_y_position - 2), battery_text, font_size=15, fill="white")
@@ -384,22 +377,13 @@ class PiWebRadioApp():
                 time.sleep(1)
 
     def update_battery_status(self):
-        self.old_battery_capacity = self.battery_capacity
-        self.old_battery_percentage = self.battery_percentage
-        self.old_battery_charging = self.battery_charging
-
         vcellH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x03)
         vcellL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x04)
         socH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x05)
         socL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x06)
-
         self.battery_capacity = (((vcellH & 0x0F) << 8) + vcellL) * 1.25  # capacity
         self.battery_percentage = ((socH << 8) + socL) * 0.003906  # current electric quantity percentage
-        self.battery_charging = self.battery_capacity > self.old_battery_capacity
-
-        if ((round(self.battery_percentage) != round(self.old_battery_percentage))
-                or (self.battery_charging != self.old_battery_charging)):
-            self.redraw_battery = True
+        self.redraw_battery = True
 
     # THREAD
     # BATTERY MANAGEMENT
@@ -409,18 +393,16 @@ class PiWebRadioApp():
             self.update_battery_status()
             if self.__debug:
                 print(f"Pourcentage : {self.battery_percentage} - Capacité : {self.battery_capacity}")
-            if ((not self.battery_charging)
-                and (self.battery_percentage <= self.__battery_alert_limit)
-                and (time.time() > self.battery_alert_time + 60)) :
+            if self.battery_percentage <= self.__battery_alert_limit:
                 self.power_alert = 1
                 self.battery_alert_time = time.time()
                 print(f"{time.ctime(self.battery_alert_time)} : Alerte batterie faible {self.battery_percentage}")
                 if self.battery_percentage <= 7.0:
                     print(f"{time.ctime(self.battery_alert_time)} : Extinction batterie faible")
-                    os.system("sudo shutdown -h now")
+                    os.system("sudo systemctl power off")
             else:
                 self.power_alert = 0
-            time.sleep(1)
+            time.sleep(60)
 
 
     # API ROUTES
@@ -489,13 +471,13 @@ class PiWebRadioApp():
     def api_total_shutdown(self):
         self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Extinction totale par API")
-        os.system("sudo shutdown -h now")
+        os.system("sudo systemctl power off")
         exit(0)
 
     def api_reboot(self):
         self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Reboot par API")
-        os.system("sudo reboot")
+        os.system("sudo systemctl reboot")
         exit(0)
 
     def api_list_radio(self):
