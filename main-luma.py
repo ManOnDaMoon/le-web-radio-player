@@ -408,7 +408,7 @@ class PiWebRadioApp():
         while not self.doing_shutdown:
             self.update_battery_status()
             if self.__debug:
-                print(f"{time.ctime(self.battery_alert_time)} : Pourcentage : {self.battery_percentage} - Capacité : {self.battery_capacity}")
+                print(f"Pourcentage : {self.battery_percentage} - Capacité : {self.battery_capacity}")
             if ((not self.battery_charging)
                 and (self.battery_percentage <= self.__battery_alert_limit)
                 and (time.time() > self.battery_alert_time + 60)) :
