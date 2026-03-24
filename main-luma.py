@@ -407,6 +407,7 @@ class PiWebRadioApp():
     def power_monitor(self):
         while not self.doing_shutdown:
             self.update_battery_status()
+            print(f"{time.time()} : {self.battery_percentage}")
             if ((not self.battery_charging)
                 and (self.battery_percentage <= self.__battery_alert_limit)
                 and (time.time() > self.battery_alert_time + 60)) :
