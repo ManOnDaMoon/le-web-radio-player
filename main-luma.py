@@ -409,7 +409,7 @@ class PiWebRadioApp():
                     os.system("sudo systemctl poweroff --force --force")
             else:
                 self.power_alert = 0
-            time.sleep(60)
+            time.sleep(5)
 
 
     # API ROUTES
