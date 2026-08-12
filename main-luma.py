@@ -174,7 +174,7 @@ class PiWebRadioApp():
         button.was_held = True
         self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Extinction totale par bouton physique")
-        os.system("sudo systemctl poweroff --force")
+        os.system("sudo systemctl poweroff --force --force")
         exit(0)
 
     def button_volume_up(self, rotary_encoder: RotaryEncoder):
@@ -408,7 +408,7 @@ class PiWebRadioApp():
                 print(f"{time.ctime(self.battery_alert_time)} : Alerte batterie faible {self.battery_percentage}")
                 if self.battery_percentage <= 7.0:
                     print(f"{time.ctime(self.battery_alert_time)} : Extinction batterie faible")
-                    os.system("sudo systemctl poweroff --force")
+                    os.system("sudo systemctl poweroff --force --force")
             else:
                 self.power_alert = 0
             time.sleep(60)
@@ -480,13 +480,13 @@ class PiWebRadioApp():
     def api_total_shutdown(self):
         self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Extinction totale par API")
-        os.system("sudo systemctl poweroff --force")
+        os.system("sudo systemctl poweroff --force --force")
         exit(0)
 
     def api_reboot(self):
         self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Reboot par API")
-        os.system("sudo systemctl reboot --force")
+        os.system("sudo systemctl reboot --force --force")
         exit(0)
 
     def api_list_radio(self):
