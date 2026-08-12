@@ -162,7 +162,7 @@ After=sound.target
 [Service]
 Type=simple
 ExecStart=/usr/bin/python3 /home/user/le-web-radio-player/main-luma.py
-Restart=always
+Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
