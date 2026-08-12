@@ -164,7 +164,7 @@ class PiWebRadioApp():
         self.clock = False
         self.doing_shutdown = True
         self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"), 2)
-        self.oled.hide()
+        #self.oled.hide()
 
         for thread in self.threads:
             thread.join()
