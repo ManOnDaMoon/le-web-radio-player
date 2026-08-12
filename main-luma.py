@@ -31,13 +31,13 @@ class PiWebRadioApp():
         # Initialisation DISPLAY
         self.serial = i2c(port=1, address=0x3C)
         self.oled = ssd1306(self.serial)
-        self.oled.contrast(50) #TODO Setup a contrast control
+        self.oled.contrast(40) #TODO Setup a contrast control
 
         # INIT UPS HAT
         self.ina219 = INA219(addr=0x43)
         self.__battery_alert_limit = 10.0 # Raise power alert if below 10%
-        self.battery_capacity = 0.0
-        self.battery_percentage = 0.0
+        self.battery_percentage = 0.0 # Battery charge level
+        self.battery_current = 0.0 # Used to detect charging
         self.battery_alert_time = 0.0
         self.update_battery_status()
 
@@ -377,20 +377,15 @@ class PiWebRadioApp():
 
     def update_battery_status(self):
         bus_voltage = self.ina219.getBusVoltage_V()  # voltage on V- (load side)
-        shunt_voltage = self.ina219.getShuntVoltage_mV() / 1000  # voltage between V+ and V- across the shunt
+        #shunt_voltage = self.ina219.getShuntVoltage_mV() / 1000  # voltage between V+ and V- across the shunt
         current = self.ina219.getCurrent_mA()  # current in mA
-        power = self.ina219.getPower_W()  # power in W
+        #power = self.ina219.getPower_W()  # power in W
         p = (bus_voltage - 3) / 1.2 * 100
         if (p > 100): p = 100
         if (p < 0): p = 0
-        #vcellH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x03)
-        #vcellL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x04)
-        #socH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x05)
-        #socL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x06)
-        #self.battery_capacity = (((vcellH & 0x0F) << 8) + vcellL) * 1.25  # capacity
-        self.battery_load = bus_voltage
+        #self.battery_load = bus_voltage
         self.battery_current = current
-        self.battery_power = power
+        #self.battery_power = power
         self.battery_percentage = p
         #self.redraw_battery = True
 
@@ -401,8 +396,8 @@ class PiWebRadioApp():
         while not self.doing_shutdown:
             self.update_battery_status()
             if self.__debug:
-                print(f"Pourcentage : {self.battery_percentage} - Capacité : {self.battery_capacity}")
-            if self.battery_percentage <= self.__battery_alert_limit:
+                print(f"Pourcentage : {self.battery_percentage} - Courant : {self.battery_current}")
+            if (self.battery_current < 0 and self.battery_percentage <= self.__battery_alert_limit):
                 self.power_alert = 1
                 self.battery_alert_time = time.time()
                 print(f"{time.ctime(self.battery_alert_time)} : Alerte batterie faible {self.battery_percentage}")
@@ -530,7 +525,7 @@ class PiWebRadioApp():
     def api_get_battery(self):
         self.update_battery_status()
         battery_status = {
-            "capacity" : self.battery_capacity,
+            "current" : self.battery_current,
             "percentage" : self.battery_percentage
         }
         return battery_status
