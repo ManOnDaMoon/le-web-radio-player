@@ -6,7 +6,7 @@
 
 - 1x Raspberry Pi Zero 2W
 - 1x Waveshare Audio Hat WM8960
-- 1x DFRobot 0528 UPS HAT + une batterie Lithium 3.7V avec connecteur Ph2
+- 1x Waveshare UPS Hat C pour Raspberry Pi Zero
 - 2x AZDelivery KY-040 Rotary Encoder Module
 - 1x écran OLED I2C 0,96" 128x64px
 
@@ -142,7 +142,7 @@ Installer Waitress comme serveur pour Flask
 sudo apt install python3-waitress
 ```
 
-Pour interroger le pourcentage de batterie sur le DFR0528
+Pour interroger le pourcentage de batterie
 ```
  sudo apt install python3-smbus
  ```

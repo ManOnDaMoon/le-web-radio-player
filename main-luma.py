@@ -12,7 +12,7 @@ from luma.core.render import canvas
 from luma.oled.device import ssd1306
 from luma.core.virtual import viewport
 
-from smbus2 import SMBus
+from INA219 import INA219
 
 from PIL import Image, ImageFont
 
@@ -34,8 +34,7 @@ class PiWebRadioApp():
         self.oled.contrast(50) #TODO Setup a contrast control
 
         # INIT UPS HAT
-        self.__ups_addr = 0x10  # ups i2c address
-        self.__ups_bus = SMBus(1)  # i2c-port 1
+        self.ina219 = INA219(addr=0x43)
         self.__battery_alert_limit = 10.0 # Raise power alert if below 10%
         self.battery_capacity = 0.0
         self.battery_percentage = 0.0
@@ -377,13 +376,23 @@ class PiWebRadioApp():
                 time.sleep(1)
 
     def update_battery_status(self):
-        vcellH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x03)
-        vcellL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x04)
-        socH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x05)
-        socL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x06)
-        self.battery_capacity = (((vcellH & 0x0F) << 8) + vcellL) * 1.25  # capacity
-        self.battery_percentage = ((socH << 8) + socL) * 0.003906  # current electric quantity percentage
-        self.redraw_battery = True
+        bus_voltage = self.ina219.getBusVoltage_V()  # voltage on V- (load side)
+        shunt_voltage = self.ina219.getShuntVoltage_mV() / 1000  # voltage between V+ and V- across the shunt
+        current = self.ina219.getCurrent_mA()  # current in mA
+        power = self.ina219.getPower_W()  # power in W
+        p = (bus_voltage - 3) / 1.2 * 100
+        if (p > 100): p = 100
+        if (p < 0): p = 0
+        #vcellH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x03)
+        #vcellL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x04)
+        #socH = self.__ups_bus.read_byte_data(self.__ups_addr, 0x05)
+        #socL = self.__ups_bus.read_byte_data(self.__ups_addr, 0x06)
+        #self.battery_capacity = (((vcellH & 0x0F) << 8) + vcellL) * 1.25  # capacity
+        self.battery_load = bus_voltage
+        self.battery_current = current
+        self.battery_power = power
+        self.battery_percentage = p
+        #self.redraw_battery = True
 
     # THREAD
     # BATTERY MANAGEMENT
