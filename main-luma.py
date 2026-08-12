@@ -36,6 +36,7 @@ class PiWebRadioApp():
         # INIT UPS HAT
         self.ina219 = INA219(addr=0x43)
         self.__battery_alert_limit = 10.0 # Raise power alert if below 10%
+        self.battery_percentage_history = []
         self.battery_percentage = 0.0 # Battery charge level
         self.battery_current = 0.0 # Used to detect charging
         self.battery_alert_time = 0.0
@@ -57,6 +58,10 @@ class PiWebRadioApp():
         self.power_alert = 0 # Power alert indicator
         self.clock = True # Clock mode indicator
         self.radio = Radio(self.__debug) # The actual radio object
+        self.redraw_volume = True
+        self.redraw_battery = True
+        self.redraw_main_text = True
+        self.redraw_secondary_text = True
         # OLED display fonts, loaded just once:
         self.icons_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "radiocontrols.ttf"), 16)
         self.title_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "Louis George Cafe.ttf"), 26)
@@ -276,10 +281,6 @@ class PiWebRadioApp():
     # This thread handles the OLED drawing procedures
     def main_display(self):
         self.oled.show()
-        self.redraw_main_text = True
-        self.redraw_secondary_text = True
-        self.redraw_volume = True
-        self.redraw_battery = True
         scroll1 = False
         scroll2 = False
         x3=0
@@ -383,16 +384,18 @@ class PiWebRadioApp():
 
     def update_battery_status(self):
         bus_voltage = self.ina219.getBusVoltage_V()  # voltage on V- (load side)
-        #shunt_voltage = self.ina219.getShuntVoltage_mV() / 1000  # voltage between V+ and V- across the shunt
         current = self.ina219.getCurrent_mA()  # current in mA
-        #power = self.ina219.getPower_W()  # power in W
         p = (bus_voltage - 3) / 1.2 * 100
-        if (p > 100): p = 100
-        if (p < 0): p = 0
-        #self.battery_load = bus_voltage
+        if p > 100: p = 100
+        if p < 0: p = 0
+        if len(self.battery_percentage_history) == 0:
+            for x in range(10):
+                self.battery_percentage_history.append(p)
+        else:
+            self.battery_percentage_history.pop(0)
+            self.battery_percentage_history.append(p)
         self.battery_current = current
-        #self.battery_power = power
-        self.battery_percentage = p
+        self.battery_percentage = sum(self.battery_percentage_history) / len(self.battery_percentage_history)
         self.redraw_battery = True
 
     # THREAD
