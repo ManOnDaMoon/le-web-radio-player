@@ -303,7 +303,7 @@ class PiWebRadioApp():
                             self.radio.set_volume(old_volume)
                             continue
                         if self.battery_current > 0:
-                            battery_text = f"⚡️Charge"
+                            battery_text = f"Charge"
                         else:
                             battery_text = f"{round(self.battery_percentage)}%"
                         xbatt = 128 - draw.textlength(battery_text, font_size=15)
@@ -365,7 +365,10 @@ class PiWebRadioApp():
             # DISPLAY PROCEDURE IN CLOCK MODE
             # Display time bouncing on the screen
             if self.clock:
-                time_text = time.strftime("%H:%M")
+                if self.battery_current > 0:
+                    time_text = time.strftime("%H:%M") + " | En charge"
+                else:
+                    time_text = time.strftime("%H:%M") + " | " + f"{round(self.battery_percentage)}%"
                 with canvas(self.oled) as draw:
                     time_text_length = draw.textlength(time_text, font_size=16)
                     draw.text((x3, y3), time_text, font_size=15, fill="white")
