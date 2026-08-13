@@ -22,7 +22,7 @@ class PiWebRadioApp():
 
     __debug = False
     __data_refresh_rate: int = 2  # Time between two metadata API calls, in seconds
-    __display_refresh_rate: float = 0.25 # Time between two OLED screen refresh, in seconds
+    __display_refresh_rate: float = 0.20 # Time between two OLED screen refresh, in seconds
     __off_time_limit: int = 15*60 # Time limit after which the OS shuts down to save battery life, in seconds. Currently Unused.
     __off_time: float = 0 # Time since the radio has been toggled off
 
@@ -62,6 +62,7 @@ class PiWebRadioApp():
         self.redraw_battery = True
         self.redraw_main_text = True
         self.redraw_secondary_text = True
+        self.menu_mode = False
         # OLED display fonts, loaded just once:
         self.icons_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "radiocontrols.ttf"), 16)
         self.title_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "Louis George Cafe.ttf"), 26)
@@ -83,7 +84,9 @@ class PiWebRadioApp():
         self.on_off_switch = Button(10, hold_time=2, bounce_time=0.1)  # GPIO10 = SW
 
         # Sélecteur Volume
-        self.mute_switch.when_pressed = self.button_mute
+        self.mute_switch.when_released = self.mute_switch_released
+        #self.mute_switch.when_pressed = self.button_mute
+        self.mute_switch.when_held = self.menu_toggle
         self.volume_knob.when_rotated_clockwise = self.button_volume_up
         self.volume_knob.when_rotated_counter_clockwise = self.button_volume_down
 
@@ -145,6 +148,11 @@ class PiWebRadioApp():
             self.toggle_on_off()
         button.was_held = False
 
+    def mute_switch_released(self, button):
+        if not button.was_held:
+            self.button_mute()
+        button.was_held = False
+
     def toggle_on_off(self):
         self.main_text = ""
         self.secondary_text = ""
@@ -182,6 +190,10 @@ class PiWebRadioApp():
         os.system("sudo systemctl poweroff --force --message=\"RADIODIANE POWEROFF\"")
         exit(0)
 
+    def menu_toggle(self, button):
+        button.was_held = True
+        self.menu_mode = True
+
     def button_volume_up(self, rotary_encoder: RotaryEncoder):
         self.volume = self.radio.volume_up()
         self.redraw_volume = True
@@ -193,7 +205,7 @@ class PiWebRadioApp():
     def button_next_radio(self, rotary_encoder: RotaryEncoder):
         self.scroll_r_count+=1
         self.scroll_l_count=0
-        if self.scroll_r_count >= 3:
+        if self.scroll_r_count >= 1:
             self.scroll_r_count = 0
             if self.radio.next_channel():
                 self.show_text(">>", "Chargement")
@@ -201,7 +213,7 @@ class PiWebRadioApp():
     def button_previous_radio(self, rotary_encoder: RotaryEncoder):
         self.scroll_l_count += 1
         self.scroll_r_count = 0
-        if self.scroll_l_count >= 3:
+        if self.scroll_l_count >= 1:
             self.scroll_l_count = 0
             if self.radio.previous_channel():
                 self.show_text("<<", "Chargement")
@@ -223,7 +235,7 @@ class PiWebRadioApp():
         self.redraw_secondary_text = True
 
     # THREAD
-    # While currenlty running, regularly check if track info has changed and set flag to redraw display accordingly.
+    # While currently running, regularly check if track info has changed and set flag to redraw display accordingly.
     # API metadata refresh happens in its own thread to avoid hanging during the HTTP request.
     def refresh_display_data(self) -> None:
         while not self.doing_shutdown:
