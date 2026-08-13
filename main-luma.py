@@ -379,10 +379,7 @@ class PiWebRadioApp():
             # DISPLAY PROCEDURE IN CLOCK MODE
             # Display time bouncing on the screen
             if self.clock:
-                if self.battery_current > 0:
-                    time_text = time.strftime("%H:%M") + " | En charge"
-                else:
-                    time_text = time.strftime("%H:%M") + " | " + f"{round(self.battery_percentage)}%"
+                time_text = time.strftime("%H:%M")
                 with canvas(self.oled) as draw:
                     time_text_length = draw.textlength(time_text, font_size=16)
                     draw.text((x3, y3), time_text, font_size=15, fill="white")
@@ -392,6 +389,15 @@ class PiWebRadioApp():
                     x3increment=-x3increment
                 if y3 <= 0 or y3 + 16 > 63:
                     y3increment=-y3increment
+
+                if self.battery_current > 0:
+                    battery_text = "LOP"
+                else:
+                    battery_text = f"L{'M' * (ceil(self.battery_percentage / 25))}P"
+                xbatt = 128 - draw.textlength(battery_text, font=self.icons_font)
+                self.redraw_battery = False
+                draw.text((xbatt, self.icons_y_position - 2), battery_text, font=self.icons_font, fill="white")
+
                 # Off mode refresh rate : one tick per second - longer means radio can turn on before the display changes.
                 time.sleep(1)
 
