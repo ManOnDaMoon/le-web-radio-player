@@ -323,7 +323,7 @@ class PiWebRadioApp():
                             battery_text = f"L{'M' * (num_bars)} {'N' * (4 - num_bars)}P"
                         xbatt = 128 - draw.textlength(battery_text, font=self.icons_font)
                         self.redraw_battery = False
-                    draw.text((xbatt, self.icons_y_position - 2), battery_text, font=self.icons_font, fill="white")
+                    draw.text((xbatt, self.icons_y_position), battery_text, font=self.icons_font, fill="white")
 
                     # TOP ICONS
                     if self.redraw_volume:
@@ -390,7 +390,7 @@ class PiWebRadioApp():
                         num_bars = ceil(self.battery_percentage / 25)
                         battery_text = f"L {'M' * (num_bars)} {'N' * (4 - num_bars)} P"
                     xbatt = 128 - draw.textlength(battery_text, font=self.icons_font)
-                    draw.text((xbatt, self.icons_y_position - 2), battery_text, font=self.icons_font, fill="white")
+                    draw.text((xbatt, self.icons_y_position), battery_text, font=self.icons_font, fill="white")
 
                 x3+=x3increment
                 y3+=y3increment
