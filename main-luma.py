@@ -408,14 +408,14 @@ class PiWebRadioApp():
         p = (bus_voltage - 3) / 1.2 * 100
         if p > 100: p = 100
         if p < 0: p = 0
-        if len(self.battery_percentage_history) == 0:
-            for x in range(10):
-                self.battery_percentage_history.append(p)
+        if current > 0:
+            self.battery_percentage_history = []
         else:
-            self.battery_percentage_history.pop(0)
             self.battery_percentage_history.append(p)
+            if len(self.battery_percentage_history) > 10:
+                self.battery_percentage_history.pop(0)
+            self.battery_percentage = sum(self.battery_percentage_history) / len(self.battery_percentage_history)
         self.battery_current = current
-        self.battery_percentage = sum(self.battery_percentage_history) / len(self.battery_percentage_history)
         self.redraw_battery = True
 
     # THREAD
