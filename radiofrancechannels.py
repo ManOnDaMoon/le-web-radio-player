@@ -156,7 +156,7 @@ class RadioFranceChannel(RadioChannel):
             api_url = self.__api_url.format(self.__RF_channel_id)
             response = None
             try:
-                response = requests.get(api_url, timeout=1.0) # 1s timeout
+                response = requests.get(api_url, timeout=1.0) # 1s timeout # TODO: TIMEOUT seems to hang whole script!
             except Exception as e:
                 print(f"{time.ctime(time.time())} : Exception : {e}")
 

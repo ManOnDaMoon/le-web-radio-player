@@ -32,7 +32,7 @@ class PiWebRadioApp():
         # Initialisation DISPLAY
         self.serial = i2c(port=1, address=0x3C)
         self.oled = ssd1306(self.serial)
-        self.oled.contrast(40) #TODO Setup a contrast control
+        self.oled.contrast(10) #TODO Setup a contrast control
 
         # INIT UPS HAT
         self.ina219 = INA219(addr=0x43)
@@ -63,15 +63,52 @@ class PiWebRadioApp():
         self.redraw_battery = True
         self.redraw_main_text = True
         self.redraw_secondary_text = True
-        self.menu_mode = False
+
         # OLED display fonts, loaded just once:
         self.icons_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "radiocontrols.ttf"), 16)
         self.title_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "Louis George Cafe.ttf"), 26)
         self.text_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "Louis George Cafe.ttf"), 16)
+        self.menu_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "Louis George Cafe.ttf"), 12)
         # OLED display default positions
         self.icons_y_position = 0
         self.title_y_position = 16
         self.text_y_position = 42
+
+        # Menu structures
+        self.redraw_menu = True
+        self.menu_active = False
+        self.menu_highlight_index = 1
+        # Menu item structure : [ "Name", value, default highlighted bool ]
+        self.menu = [
+            "Menu",
+            [
+                "Sleep",
+                ["5 min.", 5],
+                ["10 min.", 10],
+                ["15 min.", 15],
+                ["30 min.", 30],
+                ["60 min.", 60],
+                ["Off", -1],
+                ["Retour", -10]
+            ],
+            [
+                "Wifi",
+                ["Activer", 1],
+                ["Désactiver", 0],
+                ["Retour", -10]
+            ],
+            [
+                "Bluetooth",
+                ["Activer", 1],
+                ["Désactiver", 0],
+                ["Retour", -10]
+            ],
+            [
+                "Retour",
+                -10
+            ]
+        ]
+        self.displayed_menu = self.menu
 
         # Adding a hold indicator to the Button class
         Button.was_held = False
@@ -155,17 +192,37 @@ class PiWebRadioApp():
         button.was_held = False
 
     def toggle_on_off(self):
-        self.main_text = ""
-        self.secondary_text = ""
-        # TODO : Test self.radio.power instead
-        if self.radio.toggle_on_off():
-            self.power = True
-            self.clock = False
-            self.volume = self.radio.volume
+        if self.menu_active:
+            # In menu mode : NAVIGATE MENU and LAUNCH ACTIONS
+            # Check if last item of menu : go back to main menu
+            if self.menu_highlight_index == len(self.displayed_menu) - 1:
+                #go back
+                self.menu_highlight_index = 1
+                self.displayed_menu = self.menu
+                self.redraw_menu = True
+                return
+            # Check if last item or if self.displayed_menu[self.menu_highlight_index][1] is a list
+            if type(self.displayed_menu[self.menu_highlight_index][1]) == list:
+                self.displayed_menu = self.displayed_menu[self.menu_highlight_index]
+                self.menu_highlight_index = 1
+                return
+
+            # Else, exit menu and execute action
+            self.menu_active = False
+            #TODO : Execute menu action HERE - Maybe confirm action?
+
         else:
-            self.power = False
-            self.clock = True
-            self.__off_time = time.time()
+            # In standard mode : TOGGLE ON/OFF
+            self.main_text = ""
+            self.secondary_text = ""
+            if self.radio.toggle_on_off():
+                self.power = True
+                self.clock = False
+                self.volume = self.radio.volume
+            else:
+                self.power = False
+                self.clock = True
+                self.__off_time = time.time()
 
     def shutdown_tasks(self):
         self.radio.stop()
@@ -193,7 +250,10 @@ class PiWebRadioApp():
 
     def menu_toggle(self, button):
         button.was_held = True
-        self.menu_mode = True
+        self.redraw_menu = True
+        self.displayed_menu = self.menu
+        self.menu_highlight_index = 1
+        self.menu_active = not self.menu_active
 
     def button_volume_up(self, rotary_encoder: RotaryEncoder):
         self.volume = self.radio.volume_up()
@@ -208,16 +268,24 @@ class PiWebRadioApp():
         self.scroll_l_count=0
         if self.scroll_r_count >= 1:
             self.scroll_r_count = 0
-            if self.radio.next_channel():
-                self.show_text(">>", "Chargement")
+            if self.menu_active:
+                self.redraw_menu = True
+                self.menu_highlight_index = min(len(self.displayed_menu) - 1, self.menu_highlight_index + 1)
+            else:
+                if self.radio.next_channel():
+                    self.show_text(">>", "Chargement")
 
     def button_previous_radio(self, rotary_encoder: RotaryEncoder):
         self.scroll_l_count += 1
         self.scroll_r_count = 0
         if self.scroll_l_count >= 1:
             self.scroll_l_count = 0
-            if self.radio.previous_channel():
-                self.show_text("<<", "Chargement")
+            if self.menu_active:
+                self.redraw_menu = True
+                self.menu_highlight_index = max(1, self.menu_highlight_index - 1)
+            else:
+                if self.radio.previous_channel():
+                    self.show_text("<<", "Chargement")
 
     def button_mute(self):
         new_volume = self.radio.mute()
@@ -305,74 +373,94 @@ class PiWebRadioApp():
 
             # DISPLAY PROCEDURE ON POWER ON
             if self.power:
-                with canvas(self.oled) as draw:
+                # HANDLE MENU DISPLAY
+                if self.menu_active and self.redraw_menu:
+                    with canvas(self.oled) as menu_draw:
+                        for index, item in enumerate(self.displayed_menu):
+                            if index == 0:
+                                title_text = item
+                                menu_draw.rectangle([(0, 0), (128, 12)], outline="white", fill="white")
+                                menu_draw.text((64, 6), title_text, font=self.menu_font, fill="black",
+                                               anchor="mm")
+                            if index != 0:
+                                item_x = 0 if index < 5 else 64
+                                item_y = (index * 12) if index < 5 else (index - 4) * 12
+                                item_text = f"{'> ' if self.menu_highlight_index == index else ''}{item[0]}"
+                                menu_draw.text((item_x, item_y), item_text, font=self.menu_font, fill="white")
 
-                    # BATTERY STATUS
-                    if self.redraw_battery:
-                        if self.power_alert > 0:
-                            old_volume = self.radio.volume
-                            self.radio.set_volume(0)
-                            self.display_splash(os.path.join(self.__script_dir_name, "lowpower.bmp"), 3)
-                            self.power_alert = 0
-                            self.radio.set_volume(old_volume)
-                            continue
-                        if self.battery_current > 0:
-                            battery_text = "LOP"
+
+                    #TODO : Implement scroll for longer menus
+
+                else:
+                    with canvas(self.oled) as draw:
+                        # HANDLE REGULAR DISPLAY (Volume - Clock - Station - Song)
+                        # TODO : Add network signal icons
+                        # BATTERY STATUS
+                        if self.redraw_battery:
+                            if self.power_alert > 0:
+                                old_volume = self.radio.volume
+                                self.radio.set_volume(0)
+                                self.display_splash(os.path.join(self.__script_dir_name, "lowpower.bmp"), 3)
+                                self.power_alert = 0
+                                self.radio.set_volume(old_volume)
+                                continue
+                            if self.battery_current > 0:
+                                battery_text = "LOP"
+                            else:
+                                num_bars = ceil(self.battery_percentage / 25)
+                                battery_text = f"L{'M' * (num_bars)} {'N' * (4 - num_bars)}P"
+                            xbatt = 128 - draw.textlength(battery_text, font=self.icons_font)
+                            self.redraw_battery = False
+                        draw.text((xbatt, self.icons_y_position), battery_text, font=self.icons_font, fill="white")
+
+                        # TOP ICONS
+                        if self.redraw_volume:
+                            icontext = self.get_volume_text()
+                            self.redraw_volume = False
+                        draw.text((0, self.icons_y_position), icontext, font=self.icons_font, fill="white")
+
+                        # REDRAW TEXT
+                        if self.redraw_main_text:
+                            length1 = draw.textlength(self.main_text, font=self.title_font)
+                            scroll1 = (length1 > 128)
+                            pause1 = 5  # Pause (5*0,2 = ~1s) avant de démarrer le scroll
+                            x1 = 0
+                            self.redraw_main_text = False
+
+                        if self.redraw_secondary_text:
+                            length2 = draw.textlength(self.secondary_text, font=self.text_font)
+                            scroll2 = (length2 > 128)
+                            pause2 = 5  # Pause (5*0,2 = ~1s) avant de démarrer le scroll
+                            x2 = 0
+                            self.redraw_secondary_text = False
+
+                        # SCROLLING
+                        # TITLES
+                        if scroll1:
+                            line1 = self.main_text + "      "
+                            if length1 + x1 < 64:
+                                x1=0
+                                pause1 = 20
+                            draw.text((x1,self.title_y_position), line1, font=self.title_font, fill="white")
+                            if (pause1 < 0):
+                                x1-=3
+                            else:
+                                pause1-=1
                         else:
-                            num_bars = ceil(self.battery_percentage / 25)
-                            battery_text = f"L{'M' * (num_bars)} {'N' * (4 - num_bars)}P"
-                        xbatt = 128 - draw.textlength(battery_text, font=self.icons_font)
-                        self.redraw_battery = False
-                    draw.text((xbatt, self.icons_y_position), battery_text, font=self.icons_font, fill="white")
+                            draw.text((0,self.title_y_position), self.main_text, font=self.title_font, fill="white")
 
-                    # TOP ICONS
-                    if self.redraw_volume:
-                        icontext = self.get_volume_text()
-                        self.redraw_volume = False
-                    draw.text((0, self.icons_y_position), icontext, font=self.icons_font, fill="white")
-
-                    # REDRAW TEXT
-                    if self.redraw_main_text:
-                        length1 = draw.textlength(self.main_text, font=self.title_font)
-                        scroll1 = (length1 > 128)
-                        pause1 = 5  # Pause (5*0,2 = ~1s) avant de démarrer le scroll
-                        x1 = 0
-                        self.redraw_main_text = False
-
-                    if self.redraw_secondary_text:
-                        length2 = draw.textlength(self.secondary_text, font=self.text_font)
-                        scroll2 = (length2 > 128)
-                        pause2 = 5  # Pause (5*0,2 = ~1s) avant de démarrer le scroll
-                        x2 = 0
-                        self.redraw_secondary_text = False
-
-                    # SCROLLING
-                    # TITLES
-                    if scroll1:
-                        line1 = self.main_text + "      "
-                        if length1 + x1 < 64:
-                            x1=0
-                            pause1 = 20
-                        draw.text((x1,self.title_y_position), line1, font=self.title_font, fill="white")
-                        if (pause1 < 0):
-                            x1-=3
+                        if scroll2:
+                            line2 = self.secondary_text + "      "
+                            if length2 + x2 < 64:
+                                x2=0
+                                pause2 = 20
+                            draw.text((x2, self.text_y_position), line2, font=self.text_font, fill="white")
+                            if (pause2 < 0):
+                                x2-=6 # Vitesse de scroll double pour les titres
+                            else:
+                                pause2-=1
                         else:
-                            pause1-=1
-                    else:
-                        draw.text((0,self.title_y_position), self.main_text, font=self.title_font, fill="white")
-
-                    if scroll2:
-                        line2 = self.secondary_text + "      "
-                        if length2 + x2 < 64:
-                            x2=0
-                            pause2 = 20
-                        draw.text((x2, self.text_y_position), line2, font=self.text_font, fill="white")
-                        if (pause2 < 0):
-                            x2-=6 # Vitesse de scroll double pour les titres
-                        else:
-                            pause2-=1
-                    else:
-                        draw.text((0,self.text_y_position), self.secondary_text, font=self.text_font, fill="white")
+                            draw.text((0,self.text_y_position), self.secondary_text, font=self.text_font, fill="white")
 
                 # Power mode refresh rate
                 time.sleep(self.__display_refresh_rate)
@@ -420,7 +508,6 @@ class PiWebRadioApp():
 
     # THREAD
     # BATTERY MANAGEMENT
-    #TODO : Add network signal monitor
     def power_monitor(self):
         while not self.doing_shutdown:
             self.update_battery_status()
