@@ -8,7 +8,7 @@ class Radio:
     __max_volume: int = 100
     __volume_step: int = 5
 
-    __vlc_instance: vlc.Instance = vlc.Instance("--aout=alsa")
+    __vlc_instance: vlc.Instance = vlc.Instance("--aout=alsa","--no-video","--intf","dummy")
     # "--aout=alsa" parameter to suppress PulseAudio error: "PulseAudio server connection failure: Connection refused"
     #TODO : Add "-q" to stop logging warnings?
 
