@@ -2,6 +2,7 @@
 import os
 import time, signal
 from gpiozero import Button, RotaryEncoder
+from math import ceil
 import requests
 import threading
 from flask import Flask, request, abort
@@ -316,12 +317,12 @@ class PiWebRadioApp():
                             self.radio.set_volume(old_volume)
                             continue
                         if self.battery_current > 0:
-                            battery_text = f"Charge"
+                            battery_text = "LOP"
                         else:
-                            battery_text = f"{round(self.battery_percentage)}%"
-                        xbatt = 128 - draw.textlength(battery_text, font_size=15)
+                            battery_text = f"L{'M'* (ceil(self.battery_percentage / 25))}P"
+                        xbatt = 128 - draw.textlength(battery_text, font=self.icons_font)
                         self.redraw_battery = False
-                    draw.text((xbatt, self.icons_y_position - 2), battery_text, font_size=15, fill="white")
+                    draw.text((xbatt, self.icons_y_position - 2), battery_text, font=self.icons_font, fill="white")
 
                     # TOP ICONS
                     if self.redraw_volume:
