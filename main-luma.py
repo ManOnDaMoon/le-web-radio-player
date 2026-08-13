@@ -384,10 +384,10 @@ class PiWebRadioApp():
                     time_text_length = draw.textlength(time_text, font_size=16)
                     draw.text((x3, y3), time_text, font_size=15, fill="white")
                     if self.battery_current > 0:
-                        battery_text = "LOP"
+                        battery_text = "L O P"
                     else:
                         num_bars = ceil(self.battery_percentage / 25)
-                        battery_text = f"L{'M' * (num_bars)}{'N' * (4 - num_bars)}P"
+                        battery_text = f"L {'M' * (num_bars)} {'N' * (4 - num_bars)} P"
                     xbatt = 128 - draw.textlength(battery_text, font=self.icons_font)
                     draw.text((xbatt, self.icons_y_position - 2), battery_text, font=self.icons_font, fill="white")
 
