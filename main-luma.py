@@ -37,6 +37,8 @@ class PiWebRadioApp():
         # INIT UPS HAT
         self.ina219 = INA219(addr=0x43)
         self.__battery_alert_limit = 10.0 # Raise power alert if below 10%
+        self.__critical_battery_alert_limit = 5.0 # Critical alert below 5%
+        self.__final_battery_alert_limit = 3.0 # Shut down when below 3%
         self.battery_percentage_history = []
         self.battery_percentage = 0.0 # Battery charge level
         self.battery_current = 0.0 # Used to detect charging
@@ -476,10 +478,15 @@ class PiWebRadioApp():
                     time_text_length = draw.textlength(time_text, font_size=16)
                     draw.text((x3, y3), time_text, font_size=15, fill="white")
                     if self.battery_current > 0:
-                        battery_text = "L O P"
+                        battery_text = "LOP" # Battery bottom segment + charge indicator + top segment
                     else:
                         num_bars = ceil(self.battery_percentage / 25)
-                        battery_text = f"L {'M' * (num_bars)} {'N' * (4 - num_bars)} P"
+                        battery_text = (
+                            "L" # Battery bottom segment
+                            f"{'M' * (num_bars)}" # battery capacity segments
+                            f"{'N' * (4 - num_bars)}" # empty battery segments
+                            "P" # Battery top segment
+                        )
                     xbatt = 128 - draw.textlength(battery_text, font=self.icons_font)
                     draw.text((xbatt, self.icons_y_position), battery_text, font=self.icons_font, fill="white")
 
@@ -542,15 +549,27 @@ class PiWebRadioApp():
             # Power alert update
             if self.__debug:
                 print(f"Pourcentage : {self.battery_percentage} - Courant : {self.battery_current}")
-            if self.battery_current < 0 and self.battery_percentage <= self.__battery_alert_limit:
+
+            # Show an alert
+            if (self.battery_current < 0 and (
+                    (self.battery_percentage <= self.__battery_alert_limit
+                    and time.time() - self.battery_alert_time > 60)
+                    or
+                    (self.battery_percentage <= self.__critical_battery_alert_limit
+                     and time.time() - self.battery_alert_time > 15)
+                )
+            ):
                 self.power_alert = 1
                 self.battery_alert_time = time.time()
                 print(f"{time.ctime(self.battery_alert_time)} : Alerte batterie faible {self.battery_percentage}")
-                if self.battery_percentage <= 7.0:
-                    print(f"{time.ctime(self.battery_alert_time)} : Extinction batterie faible")
-                    os.system("sudo systemctl poweroff --force --message=\"RADIODIANE POWEROFF\"")
             else:
                 self.power_alert = 0
+
+            # Force shutdown if too low
+            if self.battery_current < 0 and self.battery_percentage <= self.__final_battery_alert_limit:
+                print(f"{time.ctime(self.battery_alert_time)} : Extinction batterie faible")
+                os.system("sudo systemctl poweroff --force --message=\"RADIODIANE POWEROFF\"")
+
             time.sleep(5)
 
 
