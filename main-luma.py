@@ -342,7 +342,7 @@ class PiWebRadioApp():
     # Draws the volume icons according to volume
     def get_volume_text(self) -> str:
         icontext = (
-            f"{'A' if self.is_mute else 'B'}" # Speaker icon
+            f"{'B' if self.is_mute else 'A'}" # Speaker icon
             f"{'C' if self.volume >= 10 else ''}"
             f"{'D' if self.volume >= 20 else ''}"
             f"{'E' if self.volume >= 30 else ''}"
