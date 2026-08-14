@@ -182,6 +182,21 @@ sudo systemctl status myradio
 sudo journalctl -f -u myradio.service -e
 ```
 
+# Fonctionnement
+
+## Affichage
+
+* 1 : Son activé
+* 2 : Volume sonore
+* 3 : Etat du signal Wifi
+* 4 : Etat de la batterie
+* 5 : Son désactivé (mute)
+* 6 : Mode Sleep activé (extinction automatique)
+* 7 : Batterie en cours de recharge
+
+<img width="800" height="379" alt="radiodiane-doc" src="https://github.com/user-attachments/assets/e394a53d-71b8-45a1-921c-df74d3d31146" />
+
+
 # Web API
 
 L'API est appelable en utilisant l'adresse IP de la radio ou son nom local, sur le port 80. 
