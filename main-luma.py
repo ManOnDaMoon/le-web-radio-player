@@ -84,24 +84,24 @@ class PiWebRadioApp():
         self.redraw_menu = True
         self.menu_active = False
         self.menu_highlight_index = 1
-        # Menu item structure : [ "Name", value, default highlighted bool ]
+        # Menu item structure : [ "Name", submenu or value , callback ]
         self.menu = [
             "Menu",
             [
                 "Sleep",
-                ["5 min.", 5],
-                ["10 min.", 10],
-                ["15 min.", 15],
-                ["30 min.", 30],
-                ["60 min.", 60],
-                ["Off", -1],
-                ["Retour", -10]
+                ["5 min.", 5, None],
+                ["10 min.", 10, None],
+                ["15 min.", 15, None],
+                ["30 min.", 30, None],
+                ["60 min.", 60, None],
+                ["Off", -1, None],
+                ["Retour", None, self.menu_reset]
             ],
             [
                 "Wifi",
-            #    ["Activer", 1],
-            #    ["Désactiver", 0],
-                ["Retour", -10]
+                ["SSID", 1, None], # Info only, no callback
+                ["Signal", 0, None], # Info only, no callback
+                ["Retour", None, self.menu_reset]
             ],
            # [
            #     "Bluetooth",
@@ -111,7 +111,8 @@ class PiWebRadioApp():
            # ],
             [
                 "Retour",
-                -10
+                None,
+                self.menu_close # Callback to close menu?
             ]
         ]
         self.displayed_menu = self.menu
@@ -203,21 +204,23 @@ class PiWebRadioApp():
         if self.menu_active:
             # In menu mode : NAVIGATE MENU and LAUNCH ACTIONS
             # Check if last item of menu : go back to main menu
-            if self.menu_highlight_index == len(self.displayed_menu) - 1:
-                #go back
-                self.menu_highlight_index = 1
-                self.displayed_menu = self.menu
-                self.redraw_menu = True
-                return
+            #if self.menu_highlight_index == len(self.displayed_menu) - 1:
+            #    #go back
+            #    self.menu_highlight_index = 1
+            #    self.displayed_menu = self.menu
+            #    self.redraw_menu = True
+            #    return
             # Check if last item or if self.displayed_menu[self.menu_highlight_index][1] is a list
             if type(self.displayed_menu[self.menu_highlight_index][1]) == list:
                 self.displayed_menu = self.displayed_menu[self.menu_highlight_index]
                 self.menu_highlight_index = 1
                 return
-
-            # Else, exit menu and execute action
-            self.menu_active = False
-            #TODO : Execute menu action HERE - Maybe confirm action?
+            else: #No list, so use callback method
+                if not self.displayed_menu[self.menu_highlight_index][2] is None:
+                    if self.displayed_menu[self.menu_highlight_index][1] is None:
+                        self.displayed_menu[self.menu_highlight_index][2]()
+                    else:
+                        self.displayed_menu[self.menu_highlight_index][2](self.displayed_menu[self.menu_highlight_index][1])
 
         else:
             # In standard mode : TOGGLE ON/OFF
@@ -258,10 +261,11 @@ class PiWebRadioApp():
 
     def menu_toggle(self, button):
         button.was_held = True
-        self.redraw_menu = True
-        self.displayed_menu = self.menu
-        self.menu_highlight_index = 1
-        self.menu_active = not self.menu_active
+        if self.power:
+            self.redraw_menu = True
+            self.displayed_menu = self.menu
+            self.menu_highlight_index = 1
+            self.menu_active = not self.menu_active
 
     def button_volume_up(self, rotary_encoder: RotaryEncoder):
         self.volume = self.radio.volume_up()
@@ -310,6 +314,20 @@ class PiWebRadioApp():
         self.secondary_text = secondary_text
         self.redraw_main_text = True
         self.redraw_secondary_text = True
+
+    def menu_reset(self) -> None:
+        self.menu_highlight_index = 1
+        self.displayed_menu = self.menu
+        self.redraw_menu = True
+
+    def menu_close(self) -> None:
+        self.menu_active = not self.menu_active
+
+    def menu_set_sleep(self, value: int) -> None:
+        print(f"Mise à jour SLEEP : {value} minutes")
+        #TODO: Handle sleep
+        #TODO: Display clock in icons?
+        self.menu_close()
 
     # THREAD
     # While currently running, regularly check if track info has changed and set flag to redraw display accordingly.
@@ -416,7 +434,7 @@ class PiWebRadioApp():
                                 f"{'X' if self.wifi_quality > 50 else ''}"
                                 f"{'Y' if self.wifi_quality > 75 else ''}"
                             )
-                        draw.text((64, self.icons_y_position), wifitext, font=self.icons_font, fill="white")
+                        draw.text((68, self.icons_y_position), wifitext, font=self.icons_font, fill="white")
 
                         # TOP ICONS
                         if self.redraw_volume:
@@ -516,12 +534,14 @@ class PiWebRadioApp():
                     resultdict[datumname] = datum
 
         if len(resultdict) == 0:
-            self.wifi_status = {'Quality' : '0'}
+            self.wifi_status = {'ESSID' : '', 'Quality' : '0'}
         else:
             self.wifi_status = resultdict
 
+        self.menu[2][1] = [f"SSID : {self.wifi_status['ESSID']}", 1, None]
+        self.menu[2][2] = [f"Qualité : {self.wifi_status['Quality']} / 70", 0, None]
         self.wifi_quality = int(self.wifi_status['Quality'])*100/70
-        self.redraw_wifi = True # TODO: redraw only if significant change
+        self.redraw_wifi = True
 
     def update_battery_status(self):
         bus_voltage = self.ina219.getBusVoltage_V()  # voltage on V- (load side)
@@ -537,7 +557,7 @@ class PiWebRadioApp():
                 self.battery_percentage_history.pop(0)
             self.battery_percentage = sum(self.battery_percentage_history) / len(self.battery_percentage_history)
         self.battery_current = current
-        self.redraw_battery = True # TODO: redraw only if significant change
+        self.redraw_battery = True
 
     # THREAD
     # BATTERY & NETWORK MANAGEMENT
