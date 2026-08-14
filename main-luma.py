@@ -153,13 +153,13 @@ class PiWebRadioApp():
         self.api = Flask(__name__)
 
         # Scroll the splashcreen to indicate the end of loading sequence
-        self.scroll_right(self.splash_virtual, (0,0))
+        # Disabled for faster startup
+        #self.scroll_right(self.splash_virtual, (0,0))
 
         # Start the radio in Off mode
         self.__off_time = time.time()
 
     def wait_for_internet_connection(self):
-        #TODO: Update using wifi status
         while True:
             try:
                 res = requests.get("https://www.radiofrance.fr")
@@ -341,27 +341,18 @@ class PiWebRadioApp():
 
     # Draws the volume icons according to volume
     def get_volume_text(self) -> str:
-        icontext = ""
-        if not self.is_mute:
-            icontext = "A" # Icone haut-parleur
-        else:
-            icontext = "B" # Icone haut-parleur barré
-        if (self.volume >= 15): # Barres de volume
-            icontext += "C"
-            if (self.volume >= 20):
-                icontext += "D"
-                if (self.volume >= 30):
-                    icontext += "E"
-                    if (self.volume >= 40):
-                        icontext += "F"
-                        if (self.volume >= 50):
-                            icontext += "G"
-                            if (self.volume >= 60):
-                                icontext += "H"
-                                if (self.volume >= 75):
-                                    icontext += "I"
-                                    if (self.volume > 80):
-                                        icontext += "J"
+        icontext = (
+            f"{'A' if self.is_mute else 'B'}" # Speaker icon
+            f"{'C' if self.volume >= 10 else ''}"
+            f"{'D' if self.volume >= 20 else ''}"
+            f"{'E' if self.volume >= 30 else ''}"
+            f"{'F' if self.volume >= 40 else ''}"
+            f"{'G' if self.volume >= 50 else ''}"
+            f"{'H' if self.volume >= 60 else ''}"
+            f"{'I' if self.volume >= 70 else ''}"
+            f"{'J' if self.volume >= 80 else ''}"
+        )
+
         return icontext
 
     # THREAD
@@ -398,7 +389,6 @@ class PiWebRadioApp():
                 else:
                     with canvas(self.oled) as draw:
                         # HANDLE REGULAR DISPLAY (Volume - Clock - Station - Song)
-                        # TODO : Add network signal icons
                         # BATTERY STATUS
                         if self.redraw_battery:
                             if self.power_alert > 0:
@@ -418,7 +408,12 @@ class PiWebRadioApp():
                         draw.text((xbatt, self.icons_y_position), battery_text, font=self.icons_font, fill="white")
 
                         if self.redraw_wifi:
-                            wifitext = f"U{'V' if self.wifi_quality > 0 else ''}{'W' if self.wifi_quality > 25 else ''}{'X' if self.wifi_quality > 50 else ''}{'Y' if self.wifi_quality > 75 else ''}"
+                            wifitext = (
+                                f"U{'V' if self.wifi_quality > 0 else ''}"
+                                f"{'W' if self.wifi_quality > 25 else ''}"
+                                f"{'X' if self.wifi_quality > 50 else ''}"
+                                f"{'Y' if self.wifi_quality > 75 else ''}"
+                            )
                         draw.text((64, self.icons_y_position), wifitext, font=self.icons_font, fill="white")
 
                         # TOP ICONS
@@ -512,7 +507,13 @@ class PiWebRadioApp():
                     datumname = iwresult.strip().split('=')[0]
                     datum = iwresult.strip().split('=')[1].split(' ')[0].split('/')[0].replace('"', '')
                     resultdict[datumname] = datum
-        self.wifi_status = resultdict
+
+        if len(resultdict) == 0:
+            self.wifi_status = {'Quality' : '0'}
+        else:
+            self.wifi_status = resultdict
+
+        self.wifi_quality = int(self.wifi_status['Quality'])*100/70
         self.redraw_wifi = True # TODO: redraw only if significant change
 
     def update_battery_status(self):
@@ -538,10 +539,6 @@ class PiWebRadioApp():
             self.update_battery_status()
             self.update_wifi_status()
 
-            # Wifi quality update
-            if len(self.wifi_status) == 0:
-                    self.wifi_status = {'Quality' : '0'}
-            self.wifi_quality = int(self.wifi_status['Quality'])*100/70
             # Power alert update
             if self.__debug:
                 print(f"Pourcentage : {self.battery_percentage} - Courant : {self.battery_current}")
