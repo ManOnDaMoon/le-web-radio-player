@@ -335,6 +335,7 @@ class PiWebRadioApp():
             self.sleep_mode = False
             self.sleep_time = 0.0
             self.show_text("Sleep OFF")
+            self.menu[1][0] = "Sleep"
         self.menu_close()
 
     # THREAD
@@ -343,6 +344,7 @@ class PiWebRadioApp():
     def refresh_display_data(self) -> None:
         while not self.doing_shutdown:
             if self.power:
+                # TODO: Add a 2s delay to display messages from show_text()
                 old_main_text = self.main_text
                 old_secondary_text = self.secondary_text
                 self.main_text = self.radio.get_channel_name()
@@ -571,7 +573,7 @@ class PiWebRadioApp():
         self.redraw_battery = True
 
     # THREAD
-    # BATTERY & NETWORK MANAGEMENT
+    # BATTERY & NETWORK & SLEEP MANAGEMENT
     def power_monitor(self):
         while not self.doing_shutdown:
             self.update_battery_status()
@@ -600,6 +602,18 @@ class PiWebRadioApp():
             if self.battery_current < 0 and self.battery_percentage <= self.__final_battery_alert_limit:
                 print(f"{time.ctime(self.battery_alert_time)} : Extinction batterie faible")
                 os.system("sudo systemctl poweroff --force --message=\"RADIODIANE POWEROFF\"")
+
+            if self.sleep_mode:
+                if time.time() > self.sleep_time:
+                    self.radio.power = False
+                    self.radio.stop()
+                    self.power = False
+                    self.clock = True
+                    self.__off_time = time.time()
+                    self.sleep_mode = False
+                    self.sleep_time = 0
+                    self.menu[1][0] = "Sleep"
+                self.menu[1][0] = f"Sleep ({(self.sleep_time - time.time())/60:2.0f} min.)"
 
             time.sleep(5)
 
