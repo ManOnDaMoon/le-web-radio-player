@@ -429,7 +429,7 @@ class PiWebRadioApp():
                                 self.radio.set_volume(old_volume)
                                 continue
                             if self.battery_current > 0:
-                                battery_text = "LOP"
+                                battery_text = "LONP"
                             else:
                                 num_bars = ceil(self.battery_percentage / 25)
                                 battery_text = f"L{'M' * (num_bars)} {'N' * (4 - num_bars)}P"
