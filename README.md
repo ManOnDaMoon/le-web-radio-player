@@ -98,10 +98,7 @@ sudo echo "dtparam=i2c_baudrate=400000" >> /boot/firmware/config.txt
 Télécharger le-web-radio-player (ce repo !) :
 ```
 git clone https://github.com/ManOnDaMoon/le-web-radio-player.git
-cd le-web-radio-player/
-python main.py
 ```
-La radio fonctionne !
 
 ### Modifier le Volume par défaut :
 `sudo nano /etc/wm8960-soundcard/wm8960_asound.state`
@@ -182,7 +179,7 @@ Rebooter pour vérifier le fonctionnement.
 Pour débugger :
 ```
 sudo systemctl status myradio
-journalctl -u myradio.service -e
+sudo journalctl -f -u myradio.service -e
 ```
 
 # Web API
@@ -268,4 +265,4 @@ Lancer un `sudo reboot` pour redémarrer le RPi.
 
 `myradio.local/battery`
 
-Obtenir l'état de la batterie en %
+Obtenir l'état de la batterie en % et le voltage de charge/décharge en Volts

@@ -605,6 +605,7 @@ class PiWebRadioApp():
 
             if self.sleep_mode:
                 if time.time() > self.sleep_time:
+                    # Sleep is over. Turn off.
                     self.radio.power = False
                     self.radio.stop()
                     self.power = False
@@ -613,6 +614,7 @@ class PiWebRadioApp():
                     self.sleep_mode = False
                     self.sleep_time = 0
                     self.menu[1][0] = "Sleep"
+                # Update remaining sleep time
                 self.menu[1][0] = f"Sleep ({(self.sleep_time - time.time())/60:2.0f} min.)"
 
             time.sleep(5)
