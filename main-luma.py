@@ -1,5 +1,5 @@
 
-import os
+import os, subprocess
 import time, signal
 from gpiozero import Button, RotaryEncoder
 from math import ceil
@@ -43,6 +43,9 @@ class PiWebRadioApp():
         self.battery_alert_time = 0.0
         self.update_battery_status()
 
+        self.wifi_status = None # Wifi status dictionary
+        self.wifi_quality = 0.0 # Wifi quality percentage (self.wifi_status['Quality'] rated up to 70)
+
         self.__script_dir_name = os.path.dirname(__file__)
         # Display splash screen
         self.display_splash(os.path.join(self.__script_dir_name, "radiodiane-splash.bmp"))
@@ -61,6 +64,7 @@ class PiWebRadioApp():
         self.radio = Radio(self.__debug) # The actual radio object
         self.redraw_volume = True
         self.redraw_battery = True
+        self.redraw_wifi = True
         self.redraw_main_text = True
         self.redraw_secondary_text = True
 
@@ -93,16 +97,16 @@ class PiWebRadioApp():
             ],
             [
                 "Wifi",
-                ["Activer", 1],
-                ["Désactiver", 0],
+            #    ["Activer", 1],
+            #    ["Désactiver", 0],
                 ["Retour", -10]
             ],
-            [
-                "Bluetooth",
-                ["Activer", 1],
-                ["Désactiver", 0],
-                ["Retour", -10]
-            ],
+           # [
+           #     "Bluetooth",
+           #     ["Activer", 1],
+           #     ["Désactiver", 0],
+           #     ["Retour", -10]
+           # ],
             [
                 "Retour",
                 -10
@@ -155,10 +159,12 @@ class PiWebRadioApp():
         self.__off_time = time.time()
 
     def wait_for_internet_connection(self):
+        #TODO: Update using wifi status
         while True:
             try:
                 res = requests.get("https://www.radiofrance.fr")
                 if res.status_code == 200:
+                    self.update_wifi_status()
                     return
 
                 time.sleep(1)
@@ -374,22 +380,20 @@ class PiWebRadioApp():
             # DISPLAY PROCEDURE ON POWER ON
             if self.power:
                 # HANDLE MENU DISPLAY
-                if self.menu_active and self.redraw_menu:
-                    with canvas(self.oled) as menu_draw:
-                        for index, item in enumerate(self.displayed_menu):
-                            if index == 0:
-                                title_text = item
-                                menu_draw.rectangle([(0, 0), (128, 12)], outline="white", fill="white")
-                                menu_draw.text((64, 6), title_text, font=self.menu_font, fill="black",
-                                               anchor="mm")
-                            if index != 0:
-                                item_x = 0 if index < 5 else 64
-                                item_y = (index * 12) if index < 5 else (index - 4) * 12
-                                item_text = f"{'> ' if self.menu_highlight_index == index else ''}{item[0]}"
-                                menu_draw.text((item_x, item_y), item_text, font=self.menu_font, fill="white")
-
-
-                    #TODO : Implement scroll for longer menus
+                if self.menu_active:
+                    if self.redraw_menu:
+                        with canvas(self.oled) as menu_draw:
+                            for index, item in enumerate(self.displayed_menu):
+                                if index == 0:
+                                    title_text = item
+                                    menu_draw.rectangle([(0, 0), (128, 12)], outline="white", fill="white")
+                                    menu_draw.text((64, 6), title_text, font=self.menu_font, fill="black",
+                                                   anchor="mm")
+                                if index != 0:
+                                    item_x = 0 if index < 5 else 64
+                                    item_y = (index * 12) if index < 5 else (index - 4) * 12
+                                    item_text = f"{'> ' if self.menu_highlight_index == index else ''}{item[0]}"
+                                    menu_draw.text((item_x, item_y), item_text, font=self.menu_font, fill="white")
 
                 else:
                     with canvas(self.oled) as draw:
@@ -412,6 +416,10 @@ class PiWebRadioApp():
                             xbatt = 128 - draw.textlength(battery_text, font=self.icons_font)
                             self.redraw_battery = False
                         draw.text((xbatt, self.icons_y_position), battery_text, font=self.icons_font, fill="white")
+
+                        if self.redraw_wifi:
+                            wifitext = f"U{'V' if self.wifi_quality > 0 else ''}{'W' if self.wifi_quality > 25 else ''}{'X' if self.wifi_quality > 50 else ''}{'Y' if self.wifi_quality > 75 else ''}"
+                        draw.text((64, self.icons_y_position), wifitext, font=self.icons_font, fill="white")
 
                         # TOP ICONS
                         if self.redraw_volume:
@@ -490,6 +498,23 @@ class PiWebRadioApp():
                 # Off mode refresh rate : one tick per second - longer means radio can turn on before the display changes.
                 time.sleep(1)
 
+    def update_wifi_status(self):
+        iwresult = subprocess.Popen(['iwconfig', 'wlan0'], stdout=subprocess.PIPE, universal_newlines=True)
+        out, err = iwresult.communicate()
+        resultdict = {}
+        for iwresult in out.split(' '):
+            if iwresult:
+                if iwresult.find(':') > 0:
+                    datumname = iwresult.strip().split(':')[0]
+                    datum = iwresult.strip().split(':')[1].split(' ')[0].split('/')[0].replace('"', '')
+                    resultdict[datumname] = datum
+                elif iwresult.find('=') > 0:
+                    datumname = iwresult.strip().split('=')[0]
+                    datum = iwresult.strip().split('=')[1].split(' ')[0].split('/')[0].replace('"', '')
+                    resultdict[datumname] = datum
+        self.wifi_status = resultdict
+        self.redraw_wifi = True # TODO: redraw only if significant change
+
     def update_battery_status(self):
         bus_voltage = self.ina219.getBusVoltage_V()  # voltage on V- (load side)
         current = self.ina219.getCurrent_mA()  # current in mA
@@ -504,16 +529,23 @@ class PiWebRadioApp():
                 self.battery_percentage_history.pop(0)
             self.battery_percentage = sum(self.battery_percentage_history) / len(self.battery_percentage_history)
         self.battery_current = current
-        self.redraw_battery = True
+        self.redraw_battery = True # TODO: redraw only if significant change
 
     # THREAD
-    # BATTERY MANAGEMENT
+    # BATTERY & NETWORK MANAGEMENT
     def power_monitor(self):
         while not self.doing_shutdown:
             self.update_battery_status()
+            self.update_wifi_status()
+
+            # Wifi quality update
+            if len(self.wifi_status) == 0:
+                    self.wifi_status = {'Quality' : '0'}
+            self.wifi_quality = int(self.wifi_status['Quality'])*100/70
+            # Power alert update
             if self.__debug:
                 print(f"Pourcentage : {self.battery_percentage} - Courant : {self.battery_current}")
-            if (self.battery_current < 0 and self.battery_percentage <= self.__battery_alert_limit):
+            if self.battery_current < 0 and self.battery_percentage <= self.__battery_alert_limit:
                 self.power_alert = 1
                 self.battery_alert_time = time.time()
                 print(f"{time.ctime(self.battery_alert_time)} : Alerte batterie faible {self.battery_percentage}")
