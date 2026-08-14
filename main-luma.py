@@ -24,6 +24,7 @@ class PiWebRadioApp():
     __debug = False
     __data_refresh_rate: int = 2  # Time between two metadata API calls, in seconds
     __display_refresh_rate: float = 0.20 # Time between two OLED screen refresh, in seconds
+    #TODO: Use __off_time and __off_time_limit or delete them. __off_time is not consistently updated at the time
     __off_time_limit: int = 15*60 # Time limit after which the OS shuts down to save battery life, in seconds. Currently Unused.
     __off_time: float = 0 # Time since the radio has been toggled off
 
@@ -32,7 +33,7 @@ class PiWebRadioApp():
         # Initialisation DISPLAY
         self.serial = i2c(port=1, address=0x3C)
         self.oled = ssd1306(self.serial)
-        self.oled.contrast(10) #TODO Setup a contrast control
+        self.oled.contrast(10)
 
         # INIT UPS HAT
         self.ina219 = INA219(addr=0x43)
@@ -69,6 +70,8 @@ class PiWebRadioApp():
         self.redraw_wifi = True
         self.redraw_main_text = True
         self.redraw_secondary_text = True
+        self.sleep_mode = False
+        self.sleep_time = 0.0
 
         # OLED display fonts, loaded just once:
         self.icons_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "radiocontrols.ttf"), 16)
@@ -89,12 +92,12 @@ class PiWebRadioApp():
             "Menu",
             [
                 "Sleep",
-                ["5 min.", 5, None],
-                ["10 min.", 10, None],
-                ["15 min.", 15, None],
-                ["30 min.", 30, None],
-                ["60 min.", 60, None],
-                ["Off", -1, None],
+                ["5 min.", 5, self.menu_set_sleep],
+                ["10 min.", 10, self.menu_set_sleep],
+                ["15 min.", 15, self.menu_set_sleep],
+                ["30 min.", 30, self.menu_set_sleep],
+                ["60 min.", 60, self.menu_set_sleep],
+                ["Off", -1, self.menu_set_sleep],
                 ["Retour", None, self.menu_reset]
             ],
             [
@@ -149,7 +152,7 @@ class PiWebRadioApp():
         self.daemons = []
         self.threads = []
 
-        # TODO : Display a specific information or replace with an Offline mode detection
+        # Wait for an active connection to conclude init
         self.wait_for_internet_connection()
 
         # Initialisation API
@@ -323,10 +326,15 @@ class PiWebRadioApp():
     def menu_close(self) -> None:
         self.menu_active = not self.menu_active
 
-    def menu_set_sleep(self, value: int) -> None:
-        print(f"Mise à jour SLEEP : {value} minutes")
-        #TODO: Handle sleep
-        #TODO: Display clock in icons?
+    def menu_set_sleep(self, minutes: int) -> None:
+        if minutes > 0:
+            self.sleep_mode = True
+            self.sleep_time = time.time() + (minutes * 60)
+            self.show_text("Sleep ON", f"{minutes} minutes")
+        else:
+            self.sleep_mode = False
+            self.sleep_time = 0.0
+            self.show_text("Sleep OFF")
         self.menu_close()
 
     # THREAD
@@ -426,6 +434,9 @@ class PiWebRadioApp():
                             xbatt = 128 - draw.textlength(battery_text, font=self.icons_font)
                             self.redraw_battery = False
                         draw.text((xbatt, self.icons_y_position), battery_text, font=self.icons_font, fill="white")
+
+                        if self.sleep_mode:
+                            draw.text((50, self.icons_y_position), "Z", font=self.icons_font, fill="white")
 
                         if self.redraw_wifi:
                             wifitext = (
