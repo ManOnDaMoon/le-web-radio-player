@@ -157,8 +157,8 @@ class RadioFranceChannel(RadioChannel):
             response = None
             try:
                 response = requests.get(api_url, timeout=1.0) # 1s timeout # TODO: TIMEOUT seems to hang whole script!
-            except Exception as e:
-                print(f"{time.ctime(time.time())} : Exception : {e}")
+            except requests.exceptions.RequestException as e:
+                pass # print(f"{time.ctime(time.time())} : Exception : {e}")
 
             if response:
                 if not response.ok:
