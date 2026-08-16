@@ -379,3 +379,9 @@ Lancer un `sudo reboot` pour redémarrer le RPi.
 `myradio.local/battery`
 
 Obtenir l'état de la batterie en % et le voltage de charge/décharge en Volts
+
+### Bascule Bluetooth
+
+`myradio.local/togglebt`
+
+Activer ou désactiver le Bluetooth sur la radio.
