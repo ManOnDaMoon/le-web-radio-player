@@ -106,12 +106,12 @@ class PiWebRadioApp():
                 ["Signal", 0, None], # Info only, no callback
                 ["Retour", None, self.menu_reset]
             ],
-           # [
-           #     "Bluetooth",
-           #     ["Activer", 1],
-           #     ["Désactiver", 0],
-           #     ["Retour", -10]
-           # ],
+            [
+                "Bluetooth",
+                ["Activer", True, self.menu_set_bluetooth],
+                ["Désactiver", False, self.menu_set_bluetooth],
+                ["Retour", -10]
+            ],
             [
                 "Retour",
                 None,
@@ -338,6 +338,9 @@ class PiWebRadioApp():
             self.menu[1][0] = "Sleep"
         self.menu_close()
 
+    def menu_set_bluetooth(self, active: bool) -> None:
+        return
+
     # THREAD
     # While currently running, regularly check if track info has changed and set flag to redraw display accordingly.
     # API metadata refresh happens in its own thread to avoid hanging during the HTTP request.
@@ -530,6 +533,11 @@ class PiWebRadioApp():
 
                 # Off mode refresh rate : one tick per second - longer means radio can turn on before the display changes.
                 time.sleep(1)
+
+    def update_bt_status(self):
+        iwresult = subprocess.Popen(['iwconfig', 'wlan0'], stdout=subprocess.PIPE, universal_newlines=True)
+        out, err = iwresult.communicate()
+        resultdict = {}
 
     def update_wifi_status(self):
         iwresult = subprocess.Popen(['iwconfig', 'wlan0'], stdout=subprocess.PIPE, universal_newlines=True)
