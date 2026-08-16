@@ -6,6 +6,7 @@
 
 - 1x Raspberry Pi Zero 2W
 - 1x Waveshare Audio Hat WM8960
+- 1x Waveshare UPS Hat C pour Raspberry Pi Zero
 - 2x AZDelivery KY-040 Rotary Encoder Module
 - 1x écran OLED I2C 0,96" 128x64px
 
@@ -97,16 +98,7 @@ sudo echo "dtparam=i2c_baudrate=400000" >> /boot/firmware/config.txt
 Télécharger le-web-radio-player (ce repo !) :
 ```
 git clone https://github.com/ManOnDaMoon/le-web-radio-player.git
-cd le-web-radio-player/
-python main.py
 ```
-La radio fonctionne !
-
-Si besoin, ajout crontab et log pour lancement au démarrage du RPi :
-`sudo crontab -e`
-
-Ajouter la ligne :
-`@reboot python /home/user/le-web-radio-player/main-luma.py >> /home/user/cron.log 2>&1`
 
 ### Modifier le Volume par défaut :
 `sudo nano /etc/wm8960-soundcard/wm8960_asound.state`
@@ -130,9 +122,6 @@ control.13 {
         }
 ```
 
-Installer eSpeak pour la gestion des alertes batterie
-`sudo apt install espeak -y`
-
 Installer la dernière version de Pillow pour la manipulation d’image - dirty, mais fonctionne :
 ```
 sudo apt install pip -y
@@ -144,6 +133,167 @@ Installer Flask pour l'API web (potentiellement déjà installé)
 ```
 sudo apt install python3-flask
 ```
+
+Installer Waitress comme serveur pour Flask
+```
+sudo apt install python3-waitress
+```
+
+Pour interroger le pourcentage de batterie
+```
+ sudo apt install python3-smbus
+ ```
+
+### Configuration Bluetooth
+
+Exécuter les commandes suivantes :
+```
+# Installation des utilitaires bluetooth
+sudo apt install bluez-tools bluez-alsa-utils
+
+# Vérifier la présence d'une interface bluetooth et copier l'adresse MAC indiquée (format AA:BB:CC:DD:EE)
+sudo hciconfig
+
+# Vérifier que l'@ Mac est présente dans le répertoire bluetooth
+sudo ls /var/lib/bluetooth/ 
+
+# Editer les paramètres de l'interface bluetooth
+sudo nano /var/lib/bluetooth/<Adresse MAC>/settings
+```
+
+Coller le contenu suivant et enregistrer :
+```
+[General]
+Discoverable=true
+```
+
+Modifier les paramètres généraux Bluetooth :
+```
+sudo nano /etc/bluetooth/main.conf
+```
+
+Coller le contenu suivant sous `[General]` :
+```
+DiscoverableTimeout = 0
+Class = 0x41c
+JustWorksRepairing = always
+```
+
+Activation et mise en route :
+```
+sudo systemctl enable bluetooth
+sudo systemctl start bluetooth
+```
+
+Création de l'agent Bluetooth :
+```
+sudo nano /etc/systemd/system/bt-agent.service
+```
+Coller le contenu suivant :
+```
+[Unit]
+Description=Bluetooth Auth Agent
+After=bluetooth.service
+PartOf=bluetooth.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/bt-agent -c NoInputNoOutput
+
+[Install]
+WantedBy=bluetooth.target
+```
+
+Mise en route (pas d’activation du service requise)
+```
+sudo systemctl start bt-agent
+```
+
+Redirection de l'audio reçu en bluetooth vers la carte son :
+
+Modifier les paramètres BluEZ
+```
+sudo nano /etc/default/bluez-alsa
+```
+Modifier l’option :
+```
+OPTIONS="--profile=a2dp-sink"
+```
+
+Créer le service correspondant :
+```
+sudo nano /etc/systemd/system/aplay.service
+```
+Insérer le contenu suivant : 
+```[Unit]
+Description=BlueALSA aplay service
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+ExecStart=/usr/bin/bluealsa-aplay --pcm-buffer-time=135000 --pcm-period-time=33750 00:00:00:00:00:00 -vv
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+Activation et mise en route
+systemctl enable aplay
+systemctl start aplay
+```
+
+
+### Lancement du script au démarrage via systemd
+
+```
+sudo nano /etc/systemd/system/myradio.service
+```
+
+Renseigner le fichier suivant, en modifiant le chemin vers le script `main-luma.py` :
+```
+[Unit]
+Description=Le Web Radio Player
+After=sound.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/user/le-web-radio-player/main-luma.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Puis exécuter :
+```
+sudo systemctl daemon-reload
+sudo systemctl enable myradio
+```
+
+Rebooter pour vérifier le fonctionnement.
+
+Pour débugger :
+```
+sudo systemctl status myradio
+sudo journalctl -f -u myradio.service -e
+```
+
+# Fonctionnement
+
+## Affichage
+
+* 1 : Son activé
+* 2 : Volume sonore
+* 3 : Etat du signal Wifi
+* 4 : Etat de la batterie
+* 5 : Son désactivé (mute)
+* 6 : Mode Sleep activé (extinction automatique)
+* 7 : Batterie en cours de recharge
+
+<img width="800" height="379" alt="radiodiane-doc" src="https://github.com/user-attachments/assets/e394a53d-71b8-45a1-921c-df74d3d31146" />
+
 
 # Web API
 
@@ -224,4 +374,14 @@ Lancer un `sudo shutdown -h now` pour éteindre le RPi.
 
 Lancer un `sudo reboot` pour redémarrer le RPi.
 
-Lancer un reboot
+### Battery
+
+`myradio.local/battery`
+
+Obtenir l'état de la batterie en % et le voltage de charge/décharge en Volts
+
+### Bascule Bluetooth
+
+`myradio.local/togglebt`
+
+Activer ou désactiver le Bluetooth sur la radio.

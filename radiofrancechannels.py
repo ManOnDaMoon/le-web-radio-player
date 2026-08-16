@@ -140,7 +140,6 @@ class RadioFranceChannel(RadioChannel):
         return infos
 
     def get_display_text(self) -> str:
-        #self.fetch_metadata()
         infos = self.get_current_track_info()
         infos.pop('global_program')
         if (infos['name'] == infos['program_name']) :
@@ -157,9 +156,9 @@ class RadioFranceChannel(RadioChannel):
             api_url = self.__api_url.format(self.__RF_channel_id)
             response = None
             try:
-                response = requests.get(api_url, timeout=1.0) # 1s timeout
-            except Exception as e:
-                print(f"{time.ctime(time.time())} : Exception : {e}")
+                response = requests.get(api_url, timeout=1.0) # 1s timeout # TODO: TIMEOUT seems to hang whole script!
+            except requests.exceptions.RequestException as e:
+                pass # print(f"{time.ctime(time.time())} : Exception : {e}")
 
             if response:
                 if not response.ok:
