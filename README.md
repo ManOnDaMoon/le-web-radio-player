@@ -144,6 +144,104 @@ Pour interroger le pourcentage de batterie
  sudo apt install python3-smbus
  ```
 
+### Configuration Bluetooth
+
+Exécuter les commandes suivantes :
+```
+# Installation des utilitaires bluetooth
+sudo apt install bluez-tools bluez-alsa-utils
+
+# Vérifier la présence d'une interface bluetooth et copier l'adresse MAC indiquée (format AA:BB:CC:DD:EE)
+sudo hciconfig
+
+# Vérifier que l'@ Mac est présente dans le répertoire bluetooth
+sudo ls /var/lib/bluetooth/ 
+
+# Editer les paramètres de l'interface bluetooth
+sudo nano /var/lib/bluetooth/<Adresse MAC>/settings
+```
+
+Coller le contenu suivant et enregistrer :
+```
+[General]
+Discoverable=true
+```
+
+Modifier les paramètres généraux Bluetooth :
+```
+sudo nano /etc/bluetooth/main.conf
+```
+
+Coller le contenu suivant sous `[General]` :
+```
+DiscoverableTimeout = 0
+Class = 0x41c
+JustWorksRepairing = always
+```
+
+Activation et mise en route :
+```
+sudo systemctl enable bluetooth
+sudo systemctl start bluetooth
+```
+
+Création de l'agent Bluetooth :
+```
+sudo nano /etc/systemd/system/bt-agent.service
+```
+Coller le contenu suivant :
+```
+[Unit]
+Description=Bluetooth Auth Agent
+After=bluetooth.service
+PartOf=bluetooth.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/bt-agent -c NoInputNoOutput
+
+[Install]
+WantedBy=bluetooth.target
+```
+
+Mise en route (pas d’activation du service requise)
+```
+sudo systemctl start bt-agent
+```
+
+Redirection de l'audio reçu en bluetooth vers la carte son :
+
+Modifier les paramètres BluEZ
+```
+sudo nano /etc/default/bluez-alsa
+```
+Modifier l’option :
+```
+OPTIONS="--profile=a2dp-sink"
+```
+
+Créer le service correspondant :
+```
+sudo nano /etc/systemd/system/aplay.service
+```
+Insérer le contenu suivant : 
+```[Unit]
+Description=BlueALSA aplay service
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+ExecStart=/usr/bin/bluealsa-aplay --pcm-buffer-time=135000 --pcm-period-time=33750 00:00:00:00:00:00 -vv
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+Activation et mise en route
+systemctl enable aplay
+systemctl start aplay
+```
+
+
 ### Lancement du script au démarrage via systemd
 
 ```
