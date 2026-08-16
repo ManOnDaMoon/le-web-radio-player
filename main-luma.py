@@ -761,6 +761,18 @@ class PiWebRadioApp():
         }
         return battery_status
 
+    def api_toggle_bluetooth(self):
+        if self.bt_active:
+            subprocess.Popen(["sudo", "systemctl", "stop", "bt-agent"])
+            status = "Désactivé"
+        else:
+            subprocess.Popen(["sudo", "systemctl", "start", "bt-agent"])
+            status = "Activé"
+        result = {
+            "btstatus" : status
+        }
+        return result
+
     def run_api(self):
         self.api.add_url_rule("/next", view_func=self.api_next_radio)
         self.api.add_url_rule("/previous", view_func=self.api_previous_radio)
@@ -775,6 +787,7 @@ class PiWebRadioApp():
         self.api.add_url_rule("/switch", view_func=self.api_switch_radio)
         self.api.add_url_rule("/title", view_func=self.api_get_title)
         self.api.add_url_rule("/battery", view_func=self.api_get_battery)
+        self.api.add_url_rule("/togglebt", view_func=self.api_toggle_bluetooth)
         serve(self.api, host="0.0.0.0", port=80)
         #self.api.run(host="0.0.0.0", port=80, debug=self.__debug, use_reloader=False)
 
