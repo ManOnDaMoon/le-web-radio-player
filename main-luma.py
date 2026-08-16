@@ -543,7 +543,7 @@ class PiWebRadioApp():
         btresult = subprocess.Popen(['sudo', 'systemctl', 'is-active', 'bt-agent', '--quiet'], stdout=subprocess.PIPE, universal_newlines=True)
         out, err = btresult.communicate()
         self.bt_active = (out == '0')
-        self.menu[3][1] = [f"Statut : {"Actif" if self.bt_active else "Inactif"}", None, None]
+        self.menu[3][1] = [f"Statut : {'Actif' if self.bt_active else 'Inactif'}", None, None]
 
     def update_wifi_status(self):
         iwresult = subprocess.Popen(['iwconfig', 'wlan0'], stdout=subprocess.PIPE, universal_newlines=True)
