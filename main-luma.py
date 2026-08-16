@@ -72,6 +72,7 @@ class PiWebRadioApp():
         self.redraw_secondary_text = True
         self.sleep_mode = False
         self.sleep_time = 0.0
+        self.bt_active = False
 
         # OLED display fonts, loaded just once:
         self.icons_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "radiocontrols.ttf"), 16)
@@ -102,15 +103,16 @@ class PiWebRadioApp():
             ],
             [
                 "Wifi",
-                ["SSID", 1, None], # Info only, no callback
-                ["Signal", 0, None], # Info only, no callback
+                ["SSID", None, None], # Info only, no callback
+                ["Signal", None, None], # Info only, no callback
                 ["Retour", None, self.menu_reset]
             ],
             [
                 "Bluetooth",
+                ["Statut :", None, None],
                 ["Activer", True, self.menu_set_bluetooth],
                 ["Désactiver", False, self.menu_set_bluetooth],
-                ["Retour", -10]
+                ["Retour", None, self.menu_reset]
             ],
             [
                 "Retour",
@@ -339,7 +341,10 @@ class PiWebRadioApp():
         self.menu_close()
 
     def menu_set_bluetooth(self, active: bool) -> None:
-        return
+        if active:
+            os.system("sudo systemctl start bt-agent")
+        else:
+            os.system("sudo systemctl stop bt-agent")
 
     # THREAD
     # While currently running, regularly check if track info has changed and set flag to redraw display accordingly.
@@ -535,9 +540,10 @@ class PiWebRadioApp():
                 time.sleep(1)
 
     def update_bt_status(self):
-        iwresult = subprocess.Popen(['iwconfig', 'wlan0'], stdout=subprocess.PIPE, universal_newlines=True)
-        out, err = iwresult.communicate()
-        resultdict = {}
+        btresult = subprocess.Popen(['sudo', 'systemctl', 'is-active', 'bt-agent', '--quiet'], stdout=subprocess.PIPE, universal_newlines=True)
+        out, err = btresult.communicate()
+        self.bt_active = (out == '0')
+        self.menu[3][1] = [f"Statut : {"Actif" if self.bt_active else "Inactif"}", None, None]
 
     def update_wifi_status(self):
         iwresult = subprocess.Popen(['iwconfig', 'wlan0'], stdout=subprocess.PIPE, universal_newlines=True)
@@ -586,6 +592,7 @@ class PiWebRadioApp():
         while not self.doing_shutdown:
             self.update_battery_status()
             self.update_wifi_status()
+            self.update_bt_status()
 
             # Power alert update
             if self.__debug:
