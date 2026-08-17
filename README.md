@@ -181,8 +181,12 @@ JustWorksRepairing = always
 
 Activation et mise en route :
 ```
-sudo systemctl enable bluetooth
 sudo systemctl start bluetooth
+```
+
+Copier les codes PIN bluetooth. Les personnaliser si besoin.
+```
+sudo cp pin.conf /etc/bluetooth/pin.conf
 ```
 
 Création de l'agent Bluetooth :
@@ -198,7 +202,10 @@ PartOf=bluetooth.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/bt-agent -c NoInputNoOutput
+ExecStart=/usr/bin/bt-agent -c NoInputNoOutput -p /etc/bluetooth/pin.conf
+ExecStartPost=/bin/sleep 1
+ExecStartPost=/bin/hciconfig hci0 sspmode 0
+TimeoutStopSec=3
 
 [Install]
 WantedBy=bluetooth.target
@@ -222,10 +229,11 @@ OPTIONS="--profile=a2dp-sink"
 
 Créer le service correspondant :
 ```
-sudo nano /etc/systemd/system/aplay.service
+sudo nano /etc/systemd/system/bluealsa-aplay.service
 ```
 Insérer le contenu suivant : 
-```[Unit]
+```
+[Unit]
 Description=BlueALSA aplay service
 After=bluetooth.service
 Requires=bluetooth.service
@@ -236,8 +244,10 @@ Restart=always
 
 [Install]
 WantedBy=multi-user.target
-Activation et mise en route
-systemctl enable aplay
+```
+
+Mise en route
+```
 systemctl start aplay
 ```
 

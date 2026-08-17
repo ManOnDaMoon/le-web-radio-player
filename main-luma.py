@@ -72,7 +72,9 @@ class PiWebRadioApp():
         self.redraw_secondary_text = True
         self.sleep_mode = False
         self.sleep_time = 0.0
-        self.bt_active = False
+
+        #self.bt_active = False
+
 
         # OLED display fonts, loaded just once:
         self.icons_font = ImageFont.truetype(os.path.join(self.__script_dir_name, "radiocontrols.ttf"), 16)
@@ -156,6 +158,8 @@ class PiWebRadioApp():
 
         # Wait for an active connection to conclude init
         self.wait_for_internet_connection()
+
+        self.update_bt_status()
 
         # Initialisation API
         self.api = Flask(__name__)
@@ -255,13 +259,14 @@ class PiWebRadioApp():
     def signal_handler(self, signal, frame):
         if not self.doing_shutdown: # Only if unexpected shutdown only
             self.shutdown_tasks()
+            print(f"{time.ctime(time.time())} : Fin de process par signal")
             exit(0)
 
     def total_shutdown(self, button):
         button.was_held = True
         self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Extinction totale par bouton physique")
-        os.system("sudo systemctl poweroff --force --message=\"RADIODIANE POWEROFF\"")
+        subprocess.Popen(["sudo", "systemctl", "poweroff", "--force"])
         exit(0)
 
     def menu_toggle(self, button):
@@ -342,9 +347,15 @@ class PiWebRadioApp():
 
     def menu_set_bluetooth(self, active: bool) -> None:
         if active:
+            subprocess.Popen(["sudo", "systemctl", "start", "bluetooth"])
             subprocess.Popen(["sudo", "systemctl", "start", "bt-agent"])
+            # TODO : Move following into a channel selection procedure ?
+            subprocess.Popen(["sudo", "systemctl", "start", "bluealsa-aplay"])
         else:
+            # Disables agent but existing connection remains active !
+            subprocess.Popen(["sudo", "systemctl", "stop", "bluealsa-aplay"])
             subprocess.Popen(["sudo", "systemctl", "stop", "bt-agent"])
+            subprocess.Popen(["sudo", "systemctl", "stop", "bluetooth"])
         self.show_text("Bluetooth", f"{'ON' if active else 'OFF'}")
         self.menu_close()
 
@@ -545,8 +556,8 @@ class PiWebRadioApp():
                 time.sleep(1)
 
     def update_bt_status(self):
-        btresult = subprocess.Popen(['sudo', 'systemctl', 'is-active', 'bt-agent', '--quiet'], stdout=subprocess.PIPE, universal_newlines=True)
-        streamdata = btresult.communicate()[0] # Required to populate btresult.returncode
+        btresult = subprocess.Popen(['sudo', 'systemctl', 'is-active', 'bluetooth', '--quiet'])
+        streamdata = btresult.communicate() # Required to populate btresult.returncode
         self.bt_active = (btresult.returncode == 0)
         self.menu[3][1] = [f"Statut : {'Actif' if self.bt_active else 'Inactif'}", None, None]
 
@@ -621,7 +632,7 @@ class PiWebRadioApp():
             # Force shutdown if too low
             if self.battery_current < 0 and self.battery_percentage <= self.__final_battery_alert_limit:
                 print(f"{time.ctime(self.battery_alert_time)} : Extinction batterie faible")
-                os.system("sudo systemctl poweroff --force --message=\"RADIODIANE POWEROFF\"")
+                subprocess.Popen(["sudo", "systemctl", "poweroff", "--force"])
 
             if self.sleep_mode:
                 if time.time() > self.sleep_time:
@@ -706,14 +717,14 @@ class PiWebRadioApp():
     def api_total_shutdown(self):
         self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Extinction totale par API")
-        os.system("sudo systemctl poweroff --force --message=\"RADIODIANE POWEROFF\"")
-        exit(0)
+        subprocess.Popen(["sudo", "systemctl", "poweroff", "--force"])
+        return {}
 
     def api_reboot(self):
         self.shutdown_tasks()
         print(f"{time.ctime(time.time())} : Reboot par API")
-        os.system("sudo systemctl reboot --force --message=\"RADIODIANE REBOOT\"")
-        exit(0)
+        subprocess.Popen(["sudo", "systemctl", "reboot", "--force"])
+        return {}
 
     def api_list_radio(self):
         channels = []
@@ -762,14 +773,9 @@ class PiWebRadioApp():
         return battery_status
 
     def api_toggle_bluetooth(self):
-        if self.bt_active:
-            subprocess.Popen(["sudo", "systemctl", "stop", "bt-agent"])
-            status = "Désactivé"
-        else:
-            subprocess.Popen(["sudo", "systemctl", "start", "bt-agent"])
-            status = "Activé"
+        self.menu_set_bluetooth(not self.bt_active)
         result = {
-            "btstatus" : status
+            "btstatus" : f"{'Activé' if not self.bt_active else 'Désactivé'}"
         }
         return result
 
