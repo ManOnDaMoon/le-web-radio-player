@@ -123,6 +123,9 @@ class RadioFranceChannel(RadioChannel):
         self.time_to_refresh = 0 # In seconds
         self.force_metadata_refresh = False
 
+    def channel_type(self):
+        return "STREAM"
+
     def get_channel_name(self):
         return self.name
 

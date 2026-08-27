@@ -24,9 +24,6 @@ class PiWebRadioApp():
     __debug = False
     __data_refresh_rate: int = 2  # Time between two metadata API calls, in seconds
     __display_refresh_rate: float = 0.20 # Time between two OLED screen refresh, in seconds
-    #TODO: Use __off_time and __off_time_limit or delete them. __off_time is not consistently updated at the time
-    __off_time_limit: int = 15*60 # Time limit after which the OS shuts down to save battery life, in seconds. Currently Unused.
-    __off_time: float = 0 # Time since the radio has been toggled off
 
     def __init__(self):
         # IO INIT
@@ -60,10 +57,8 @@ class PiWebRadioApp():
         self.scroll_r_count = 0 # Rotary buttons scroll counts
         self.scroll_l_count = 0
         self.is_mute = False # Mute indicator
-        self.power = False # Power indicator
         self.doing_shutdown = False # OS Shutdown in progress indicator
         self.power_alert = 0 # Power alert indicator
-        self.clock = True # Clock mode indicator
         self.radio = Radio(self.__debug) # The actual radio object
         self.redraw_volume = True
         self.redraw_battery = True
@@ -168,9 +163,6 @@ class PiWebRadioApp():
         # Disabled for faster startup
         #self.scroll_right(self.splash_virtual, (0,0))
 
-        # Start the radio in Off mode
-        self.__off_time = time.time()
-
     def wait_for_internet_connection(self):
         while True:
             try:
@@ -201,7 +193,7 @@ class PiWebRadioApp():
 
     def on_off_released(self, button):
         if not button.was_held:
-            self.toggle_on_off()
+            self.button_one_press()
         button.was_held = False
 
     def mute_switch_released(self, button):
@@ -209,7 +201,7 @@ class PiWebRadioApp():
             self.button_mute()
         button.was_held = False
 
-    def toggle_on_off(self):
+    def button_one_press(self):
         if self.menu_active:
             # In menu mode : NAVIGATE MENU and LAUNCH ACTIONS
             # Check if last item of menu : go back to main menu
@@ -233,21 +225,16 @@ class PiWebRadioApp():
 
         else:
             # In standard mode : TOGGLE ON/OFF
-            self.main_text = ""
-            self.secondary_text = ""
-            if self.radio.toggle_on_off():
-                self.power = True
-                self.clock = False
-                self.volume = self.radio.volume
-            else:
-                self.power = False
-                self.clock = True
-                self.__off_time = time.time()
+            self.toggle_on_off()
+
+    def toggle_on_off(self):
+        self.main_text = ""
+        self.secondary_text = ""
+        if self.radio.toggle_on_off():
+            self.volume = self.radio.volume
 
     def shutdown_tasks(self):
         self.radio.stop()
-        self.power = False
-        self.clock = False
         self.doing_shutdown = True
         self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"), 2)
         #self.oled.hide()
@@ -271,7 +258,7 @@ class PiWebRadioApp():
 
     def menu_toggle(self, button):
         button.was_held = True
-        if self.power:
+        if self.radio.power:
             self.redraw_menu = True
             self.displayed_menu = self.menu
             self.menu_highlight_index = 1
@@ -349,8 +336,6 @@ class PiWebRadioApp():
         if active:
             subprocess.Popen(["systemctl", "start", "bluetooth"])
             subprocess.Popen(["systemctl", "start", "bt-agent"])
-            # TODO : Move following into a channel selection procedure ?
-            subprocess.Popen(["systemctl", "start", "bluealsa-aplay"])
         else:
             # Disables agent but existing connection remains active !
             subprocess.Popen(["systemctl", "stop", "bluealsa-aplay"])
@@ -364,7 +349,7 @@ class PiWebRadioApp():
     # API metadata refresh happens in its own thread to avoid hanging during the HTTP request.
     def refresh_display_data(self) -> None:
         while not self.doing_shutdown:
-            if self.power:
+            if self.radio.power:
                 # TODO: Add a 2s delay to display messages from show_text()
                 old_main_text = self.main_text
                 old_secondary_text = self.secondary_text
@@ -384,8 +369,8 @@ class PiWebRadioApp():
     # So a __data_refresh_rate of 1s or 2s is not too long here.
     def refresh_metadata(self):
         while not self.doing_shutdown:
-            if self.power:
-                self.radio.current_channel.fetch_metadata()
+            if self.radio.power:
+                self.radio.fetch_metadata()
                 time.sleep(self.__data_refresh_rate)
             else:
                 time.sleep(1)
@@ -420,7 +405,7 @@ class PiWebRadioApp():
         while not self.doing_shutdown:
 
             # DISPLAY PROCEDURE ON POWER ON
-            if self.power:
+            if self.radio.power:
                 # HANDLE MENU DISPLAY
                 if self.menu_active:
                     if self.redraw_menu:
@@ -527,7 +512,7 @@ class PiWebRadioApp():
 
             # DISPLAY PROCEDURE IN CLOCK MODE
             # Display time bouncing on the screen
-            if self.clock:
+            else:
                 time_text = time.strftime("%H:%M")
                 with canvas(self.oled) as draw:
                     time_text_length = draw.textlength(time_text, font_size=16)
@@ -639,9 +624,6 @@ class PiWebRadioApp():
                     # Sleep is over. Turn off.
                     self.radio.power = False
                     self.radio.stop()
-                    self.power = False
-                    self.clock = True
-                    self.__off_time = time.time()
                     self.sleep_mode = False
                     self.sleep_time = 0
                     self.menu[1][0] = "Sleep"

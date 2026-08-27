@@ -1,5 +1,8 @@
+from radiochannel import RadioChannel
+from btchannel import BtChannel
 import radiofrancechannels
 
+import subprocess
 import vlc
 
 class Radio:
@@ -16,7 +19,8 @@ class Radio:
         if not debug: self.__vlc_instance.log_unset() # disable VLC console output
         self.power = False
         self.volume = self.__default_volume
-        self.channels = radiofrancechannels.get_radiofrance_channels()
+        self.channels : list[RadioChannel] = radiofrancechannels.get_radiofrance_channels()
+        self.channels.append(BtChannel())
         self.channel_num = 0
         self.media_player = self.__vlc_instance.media_player_new()
         if debug:
@@ -36,16 +40,21 @@ class Radio:
         if not self.power:
             self.power = True
             self.current_channel = self.channels[self.channel_num]
-            self.media = self.__vlc_instance.media_new(self.current_channel.get_channel_url())
-            self.media.get_mrl()
-            self.media_player.audio_set_volume(self.volume)
-            self.media_player.set_media(self.media)
+            if self.current_channel.channel_type() == "STREAM":
+                self.media = self.__vlc_instance.media_new(self.current_channel.get_channel_url())
+                self.media.get_mrl()
+                self.media_player.audio_set_volume(self.volume)
+                self.media_player.set_media(self.media)
+                self.play()
+            elif self.current_channel.channel_type() == "BLUETOOTH":
+                subprocess.Popen(["systemctl", "start", "bluealsa-aplay"])
             self.current_channel.force_metadata_refresh = True
-            #self.current_channel.fetch_metadata(True)  # Causes hang during metadata API call
-            self.play()
         else:
             self.power = False
-            self.stop()
+            if self.current_channel.channel_type() == "STREAM":
+                self.stop()
+            elif self.current_channel.channel_type() == "BLUETOOTH":
+                subprocess.Popen(["systemctl", "stop", "bluealsa-aplay"])
         return self.power
 
     def play(self):
@@ -54,16 +63,26 @@ class Radio:
     def switch_channel(self, num: int) -> str:
         num =  (self.channel_num + num) % len(self.channels)
         if self.power:
-            self.stop()
+
+            # Properly close current channel
+            if self.current_channel.channel_type() == "STREAM":
+                self.stop()
+            elif self.current_channel.channel_type() == "BLUETOOTH":
+                subprocess.Popen(["systemctl", "stop", "bluealsa-aplay"])
+
+            # Switch to next one and start properly
             self.channel_num = num
             self.current_channel = self.channels[self.channel_num]
-            self.media = self.__vlc_instance.media_new(self.current_channel.get_channel_url())
-            self.media.get_mrl()
-            self.media_player.set_media(self.media)
+            if self.current_channel.channel_type() == "STREAM":
+                self.media = self.__vlc_instance.media_new(self.current_channel.get_channel_url())
+                self.media.get_mrl()
+                self.media_player.set_media(self.media)
+                self.play()
+            elif self.current_channel.channel_type() == "BLUETOOTH":
+                subprocess.Popen(["systemctl", "start", "bluealsa-aplay"])
             self.current_channel.force_metadata_refresh = True
-            #self.current_channel.fetch_metadata(True)  # Causes hang during metadata API call
-            self.play()
             return self.current_channel.get_channel_name()
+
         else:
             return ""
 
@@ -74,6 +93,7 @@ class Radio:
         return self.switch_channel(-1)
 
     def set_volume(self, volume: int) -> int:
+        #TODO: Handle bluetooth mode
         if self.media_player.get_state() == vlc.State.Playing:
             if volume >= self.__max_volume:
                 self.volume = self.__max_volume
@@ -135,6 +155,10 @@ class Radio:
         if self.current_channel:
             return self.current_channel.get_channel_name()
         return ""
+
+    def fetch_metadata(self):
+        if self.power:
+            self.current_channel.fetch_metadata()
 
     def get_debug(self):
         if self.current_channel:
