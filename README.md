@@ -88,7 +88,7 @@ sudo apt install python3-textual -y
 # Bibliothèques VLC Python
 sudo apt install python3-vlc -y
 
-Installation library OLED :
+#Installation library OLED :
 sudo apt install python3-luma.oled -y
 
 # Augmenter la vitesse de rafraichissement I2C :
@@ -150,6 +150,9 @@ Exécuter les commandes suivantes :
 ```
 # Installation des utilitaires bluetooth
 sudo apt install bluez-tools bluez-alsa-utils
+
+# Installation library PyDBUS
+sudo apt install python3-pydbus -y
 
 # Vérifier la présence d'une interface bluetooth et copier l'adresse MAC indiquée (format AA:BB:CC:DD:EE)
 sudo hciconfig
