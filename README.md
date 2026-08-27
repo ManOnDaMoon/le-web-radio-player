@@ -236,7 +236,7 @@ Insérer le contenu suivant :
 [Unit]
 Description=BlueALSA aplay service
 After=bluetooth.service
-Requires=bluetooth.service
+#Requires=bluetooth.service
 
 [Service]
 ExecStart=/usr/bin/bluealsa-aplay --pcm-buffer-time=135000 --pcm-period-time=33750 00:00:00:00:00:00 -vv
