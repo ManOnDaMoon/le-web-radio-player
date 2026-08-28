@@ -8,6 +8,7 @@ class BtChannel(RadioChannel):
         self.__systembus = SystemBus()
         self.__dbus = self.__systembus.get('.DBus')
         self.__media_player = None
+        self.__media_transport = None
         self.__bluetooth_status = False
         self.__device_name = ''
         self.track_name = ''
@@ -36,13 +37,15 @@ class BtChannel(RadioChannel):
                 self.__device_name = obj_data.get('org.bluez.Device1').get('Name')
             if obj_data.get('org.bluez.MediaPlayer1') is not None:
                 self.__media_player = self.__systembus.get('org.bluez', obj_path)
+            if obj_data.get('org.bluez.MediaTransport1') is not None:
+                self.__media_transport = self.__systembus.get('org.bluez', obj_path)
         if not device_found:
             self.__media_player = None
             self.__device_name = ''
 
         return device_found
 
-    def channel_type(self):
+    def get_channel_type(self):
         return "BLUETOOTH"
 
     def get_channel_name(self) -> str:
@@ -68,8 +71,15 @@ class BtChannel(RadioChannel):
             self.track_name = trackinfo['Title']
             self.artist_name = trackinfo['Artist']
         else:
-            self.track_name = 'Erreur'
-            self.artist_name = 'Non connecté'
+            self.track_name = 'Rechercher "radiodiane"'
+            self.artist_name = 'Code : 0000 ou 1234'
+
+    def set_volume(self, volume: int) -> int:
+        if self.update_bluetooth_status():
+            self.__media_transport.Volume = volume
+            return self.__media_transport.Volume
+        else:
+            return -1
 
     def get_debug(self) -> str:
         return "Empty"

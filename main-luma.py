@@ -56,7 +56,6 @@ class PiWebRadioApp():
         self.volume = 0 # Initial volume
         self.scroll_r_count = 0 # Rotary buttons scroll counts
         self.scroll_l_count = 0
-        self.is_mute = False # Mute indicator
         self.doing_shutdown = False # OS Shutdown in progress indicator
         self.power_alert = 0 # Power alert indicator
         self.radio = Radio(self.__debug) # The actual radio object
@@ -238,7 +237,6 @@ class PiWebRadioApp():
         self.radio.stop()
         self.doing_shutdown = True
         self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"), 2)
-        #self.oled.hide()
 
         for thread in self.threads:
             thread.join()
@@ -298,13 +296,8 @@ class PiWebRadioApp():
                     self.show_text("<<", "Chargement")
 
     def button_mute(self):
-        new_volume = self.radio.mute()
-        if new_volume != -1:
-            if new_volume == 0:
-                self.is_mute = True
-            else:
-                self.is_mute = False
-            self.redraw_volume = True
+        self.radio.mute()
+        self.redraw_volume = True
 
     # Forces a custom text to be displayed immediately in front of the metadata text
     def show_text(self, text, secondary_text = "") -> None:
@@ -379,7 +372,7 @@ class PiWebRadioApp():
     # Draws the volume icons according to volume
     def get_volume_text(self) -> str:
         icontext = (
-            f"{'B' if self.is_mute else 'A'}" # Speaker icon
+            f"{'B' if self.radio.is_mute else 'A'}" # Speaker icon
             f"{'C' if self.volume >= 10 else ''}"
             f"{'D' if self.volume >= 20 else ''}"
             f"{'E' if self.volume >= 30 else ''}"
@@ -680,12 +673,7 @@ class PiWebRadioApp():
 
     def api_mute(self):
         new_volume = self.radio.mute()
-        if new_volume != -1:
-            if new_volume == 0:
-                self.is_mute = True
-            else:
-                self.is_mute = False
-            self.redraw_volume = True
+        self.redraw_volume = True
         response = {
             "volume" : new_volume
         }
@@ -716,7 +704,7 @@ class PiWebRadioApp():
         for channel in self.radio.channels:
             channels.append({
                 "num" : self.radio.channels.index(channel),
-                "name" : channel.name
+                "name" : channel.get_channel_name()
             })
         return channels
 

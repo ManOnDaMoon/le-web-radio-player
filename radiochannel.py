@@ -5,7 +5,7 @@ class RadioChannel(ABC):
 
     @property
     @abstractmethod
-    def channel_type(self):
+    def get_channel_type(self):
         pass
 
     @abstractmethod
