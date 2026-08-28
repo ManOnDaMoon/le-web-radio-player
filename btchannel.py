@@ -1,33 +1,60 @@
 from radiochannel import RadioChannel
 from pydbus import SystemBus
-import json
 
 class BtChannel(RadioChannel):
 
     def __init__(self):
         self.force_metadata_refresh = False
-        self.bus = SystemBus()
-        #TODO : Dynamically set the following
-        #TODO : Try catch this
-        self.media_player = self.bus.get('org.bluez', '/org/bluez/hci0/dev_E0_33_8E_0F_23_53/player0')
-        self.device = self.bus.get('org.bluez', '/org/bluez/hci0/dev_E0_33_8E_0F_23_53')
+        self.__systembus = SystemBus()
+        self.__dbus = self.__systembus.get('.DBus')
+        self.__media_player = None
+        self.__bluetooth_status = False
+        self.__device_name = ''
+        self.track_name = ''
+        self.artist_name = ''
+
+    # Returns True if Bluetooth is active and connected
+    def update_bluetooth_status(self) -> bool:
+
+        names = self.__dbus.ListNames()
+        if not 'org.bluez' in names:
+            # Bluetooth disabled
+            self.__bluetooth_status = False
+            self.__media_player = None
+            self.__device_name = ''
+            return False
+
+        # Bluetooth enabled
+        device_found = False
+        self.__bluetooth_status = True
+        bluez_bus = self.__systembus.get('org.bluez', '/')
+        managed_objects = bluez_bus.GetManagedObjects()
+        for obj_path, obj_data in managed_objects.items():
+            if obj_data.get('org.bluez.Device1') is not None\
+                    and obj_data.get('org.bluez.Device1').get('Connected'):
+                device_found = True
+                self.__device_name = obj_data.get('org.bluez.Device1').get('Name')
+            if obj_data.get('org.bluez.MediaPlayer1') is not None:
+                self.__media_player = self.__systembus.get('org.bluez', obj_path)
+        if not device_found:
+            self.__media_player = None
+            self.__device_name = ''
+
+        return device_found
 
     def channel_type(self):
         return "BLUETOOTH"
 
     def get_channel_name(self) -> str:
-        # TODO: Try catch this
-        return self.device.Name
+        return f"{self.__device_name if self.__device_name != '' else 'Bluetooth'}"
 
     def get_channel_url(self) -> str:
-        return None
+        return ''
 
     def get_current_track_info(self) -> dict[str, str]:
-        #TODO : try catch this
-        trackinfo = self.media_player.Track
         infos = {
-            "track_name": trackinfo['Title'],
-            "artist_name": trackinfo['Artist']
+            "track_name": self.track_name,
+            "artist_name": self.artist_name,
         }
         return infos
 
@@ -36,8 +63,13 @@ class BtChannel(RadioChannel):
         return " | ".join(infos.values())
 
     def fetch_metadata(self, force: bool = False):
-        # TODO : Use DBus to get track info
-        pass
+        if self.update_bluetooth_status():
+            trackinfo = self.__media_player.Track
+            self.track_name = trackinfo['Title']
+            self.artist_name = trackinfo['Artist']
+        else:
+            self.track_name = 'Erreur'
+            self.artist_name = 'Non connecté'
 
     def get_debug(self) -> str:
         return "Empty"

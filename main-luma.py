@@ -164,6 +164,7 @@ class PiWebRadioApp():
         #self.scroll_right(self.splash_virtual, (0,0))
 
     def wait_for_internet_connection(self):
+        # TODO: Check connection using DBus? Maybe in update_wifi_status()?
         while True:
             try:
                 res = requests.get("https://www.radiofrance.fr")
@@ -541,12 +542,14 @@ class PiWebRadioApp():
                 time.sleep(1)
 
     def update_bt_status(self):
+        # TODO : Get Bluetooth info from DBus? Maybe use BtChannel.update_bluetooth_status()?
         btresult = subprocess.Popen(['systemctl', 'is-active', 'bluetooth', '--quiet'])
         streamdata = btresult.communicate() # Required to populate btresult.returncode
         self.bt_active = (btresult.returncode == 0)
         self.menu[3][1] = [f"Statut : {'Actif' if self.bt_active else 'Inactif'}", None, None]
 
     def update_wifi_status(self):
+        # TODO : Get Wifi info from DBus?
         iwresult = subprocess.Popen(['iwconfig', 'wlan0'], stdout=subprocess.PIPE, universal_newlines=True)
         out, err = iwresult.communicate()
         resultdict = {}
