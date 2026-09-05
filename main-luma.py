@@ -311,14 +311,14 @@ class PiWebRadioApp():
         self.menu_close()
 
     def menu_set_bluetooth(self, active: bool) -> None:
+        systemd_bus = self.system_bus.get('.systemd1')
         if active:
-            subprocess.Popen(["systemctl", "start", "bluetooth"])
-            subprocess.Popen(["systemctl", "start", "bt-agent"])
+            systemd_bus.StartUnit('bluetooth.service', 'replace')
+            systemd_bus.StartUnit('bt-agent.service', 'replace')
         else:
-            # Disables agent but existing connection remains active !
-            subprocess.Popen(["systemctl", "stop", "bluealsa-aplay"])
-            subprocess.Popen(["systemctl", "stop", "bt-agent"])
-            subprocess.Popen(["systemctl", "stop", "bluetooth"])
+            systemd_bus.StopUnit('bluealsa-aplay.service', 'replace')
+            systemd_bus.StopUnit('bt-agent.service', 'replace')
+            systemd_bus.StopUnit('bluetooth.service', 'replace')
         self.show_text("Bluetooth", f"{'ON' if active else 'OFF'}")
         self.menu_close()
 
@@ -519,10 +519,11 @@ class PiWebRadioApp():
                 time.sleep(1)
 
     def update_bt_status(self):
-        # TODO : Get Bluetooth info from DBus? Maybe use BtChannel.update_bluetooth_status()?
-        btresult = subprocess.Popen(['systemctl', 'is-active', 'bluetooth', '--quiet'])
-        streamdata = btresult.communicate() # Required to populate btresult.returncode
-        self.bt_active = (btresult.returncode == 0)
+        systemd_bus = self.system_bus.get('.systemd1')
+        btservice_path = systemd_bus.GetUnit('bluetooth.service')
+        btservice = self.system_bus.get('.systemd1', btservice_path)
+        btresult = btservice.ActiveState
+        self.bt_active = (btresult == 'active')
         self.menu[3][1] = [f"Statut : {'Actif' if self.bt_active else 'Inactif'}", None, None]
 
     def update_wifi_status(self):
