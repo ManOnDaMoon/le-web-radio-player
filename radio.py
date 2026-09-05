@@ -1,7 +1,7 @@
 from radiochannel import RadioChannel
 from btchannel import BtChannel
 import radiofrancechannels
-
+import httpx
 import subprocess
 import vlc
 
@@ -20,7 +20,8 @@ class Radio:
         self.power = False
         self.volume = self.__default_volume
         self.is_mute = False
-        self.channels : list[RadioChannel] = radiofrancechannels.get_radiofrance_channels()
+        self.metadata_client = httpx.Client()
+        self.channels : list[RadioChannel] = radiofrancechannels.get_radiofrance_channels(self.metadata_client)
         self.channels.append(BtChannel())
         self.channel_num = 0
         self.media_player = self.__vlc_instance.media_player_new()
@@ -141,6 +142,10 @@ class Radio:
     def stop(self):
         self.media_player.stop()
         self.current_channel = None
+
+    def shutdown(self):
+        self.stop()
+        self.metadata_client.close()
 
     def set_display(self, text):
         self.display_text = text

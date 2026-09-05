@@ -144,6 +144,11 @@ Pour interroger le pourcentage de batterie
  sudo apt install python3-smbus
  ```
 
+Pour gérer les pools de connexion
+```
+sudo apt install python3-httpx
+```
+
 ### Configuration Bluetooth
 
 Exécuter les commandes suivantes :

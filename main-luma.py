@@ -3,10 +3,10 @@ import os, subprocess
 import time, signal
 from gpiozero import Button, RotaryEncoder
 from math import ceil
-import requests
 import threading
 from flask import Flask, request, abort
 from waitress import serve
+from pydbus import SystemBus
 
 from luma.core.interface.serial import i2c
 from luma.core.render import canvas
@@ -42,6 +42,8 @@ class PiWebRadioApp():
         self.battery_current = 0.0 # Used to detect charging
         self.battery_alert_time = 0.0
         self.update_battery_status()
+
+        self.system_bus = SystemBus()
 
         self.wifi_status = None # Wifi status dictionary
         self.wifi_quality = 0.0 # Wifi quality percentage (self.wifi_status['Quality'] rated up to 70)
@@ -151,29 +153,11 @@ class PiWebRadioApp():
         self.threads = []
 
         # Wait for an active connection to conclude init
-        self.wait_for_internet_connection()
-
+        self.update_wifi_status()
         self.update_bt_status()
 
         # Initialisation API
         self.api = Flask(__name__)
-
-        # Scroll the splashcreen to indicate the end of loading sequence
-        # Disabled for faster startup
-        #self.scroll_right(self.splash_virtual, (0,0))
-
-    def wait_for_internet_connection(self):
-        # TODO: Check connection using DBus? Maybe in update_wifi_status()?
-        while True:
-            try:
-                res = requests.get("https://www.radiofrance.fr")
-                if res.status_code == 200:
-                    self.update_wifi_status()
-                    return
-
-                time.sleep(1)
-            except:
-                pass
 
     # VIRTUAL
     def scroll_right(self, virtual, pos):
@@ -234,8 +218,8 @@ class PiWebRadioApp():
             self.volume = self.radio.volume
 
     def shutdown_tasks(self):
-        self.radio.stop()
         self.doing_shutdown = True
+        self.radio.shutdown()
         self.display_splash(os.path.join(self.__script_dir_name, "aurevoir.bmp"), 2)
 
         for thread in self.threads:
@@ -542,29 +526,30 @@ class PiWebRadioApp():
         self.menu[3][1] = [f"Statut : {'Actif' if self.bt_active else 'Inactif'}", None, None]
 
     def update_wifi_status(self):
-        # TODO : Get Wifi info from DBus?
-        iwresult = subprocess.Popen(['iwconfig', 'wlan0'], stdout=subprocess.PIPE, universal_newlines=True)
-        out, err = iwresult.communicate()
-        resultdict = {}
-        for iwresult in out.split(' '):
-            if iwresult:
-                if iwresult.find(':') > 0:
-                    datumname = iwresult.strip().split(':')[0]
-                    datum = iwresult.strip().split(':')[1].split(' ')[0].split('/')[0].replace('"', '')
-                    resultdict[datumname] = datum
-                elif iwresult.find('=') > 0:
-                    datumname = iwresult.strip().split('=')[0]
-                    datum = iwresult.strip().split('=')[1].split(' ')[0].split('/')[0].replace('"', '')
-                    resultdict[datumname] = datum
-
-        if len(resultdict) == 0:
-            self.wifi_status = {'ESSID' : '', 'Quality' : '0'}
+        # Use DBus to get Wifi status
+        netmgr_bus = self.system_bus.get('.NetworkManager')
+        ap_path = '/'
+        for connection_path in netmgr_bus.ActiveConnections:
+            connection = self.system_bus.get('.NetworkManager', connection_path)
+            ap_path = connection.SpecificObject
+            if ap_path != '/':
+                break # Break on first access point found
+        if ap_path == '/':
+            # No active Wifi access point found
+            self.wifi_status = {'ESSID': '', 'Quality': 0}
         else:
-            self.wifi_status = resultdict
+            ap = self.system_bus.get('.NetworkManager', ap_path)
+            self.wifi_status = {
+                'ESSID': ''.join(chr(x) for x in ap.Ssid), # AP.Ssid returns an int array (!)
+                'Quality': int(ap.Strength)
+            }
 
+        # Fill in menu items with Wifi info
         self.menu[2][1] = [f"SSID : {self.wifi_status['ESSID']}", 1, None]
-        self.menu[2][2] = [f"Qualité : {self.wifi_status['Quality']} / 70", 0, None]
-        self.wifi_quality = int(self.wifi_status['Quality'])*100/70
+        self.menu[2][2] = [f"Qualité : {self.wifi_status['Quality']}", 0, None]
+
+        # Update Wifi quality attribute for display
+        self.wifi_quality = self.wifi_status['Quality']
         self.redraw_wifi = True
 
     def update_battery_status(self):
@@ -575,6 +560,8 @@ class PiWebRadioApp():
         if p < 0: p = 0
         if current > 0:
             self.battery_percentage_history = []
+            self.battery_percentage_history.append(p)
+            self.battery_percentage = p
         else:
             self.battery_percentage_history.append(p)
             if len(self.battery_percentage_history) > 10:

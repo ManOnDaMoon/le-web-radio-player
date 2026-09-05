@@ -55,6 +55,9 @@ class BtChannel(RadioChannel):
         return ''
 
     def get_current_track_info(self) -> dict[str, str]:
+        if self.force_metadata_refresh:
+            self.force_metadata_refresh = False
+            self.update_bluetooth_status()
         infos = {
             "track_name": self.track_name,
             "artist_name": self.artist_name,

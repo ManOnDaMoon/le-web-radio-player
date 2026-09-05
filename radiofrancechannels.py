@@ -1,4 +1,4 @@
-import requests
+import httpx
 from radiochannel import RadioChannel
 import time
 
@@ -111,7 +111,7 @@ class RadioFranceChannel(RadioChannel):
         webrf_webradio_player
     """
 
-    def __init__(self, channel_info: list):
+    def __init__(self, channel_info: list, client: httpx.Client):
         self.name = channel_info[0] # Temporary name awaiting update from API
         self.url = channel_info[1] # Stream URL
         self.__RF_channel_id = channel_info[2] # RadioFrance specific channel id
@@ -119,9 +119,11 @@ class RadioFranceChannel(RadioChannel):
         self.program_name = None
         self.track_name = None
         self.artist_name = None
+        self.metadata_client = client
         self.last_metadata_refresh = 0 # In epoch time
         self.time_to_refresh = 0 # In seconds
         self.force_metadata_refresh = False
+        self.metadata_client = httpx.Client()
 
     def get_channel_type(self):
         return "STREAM"
@@ -153,32 +155,32 @@ class RadioFranceChannel(RadioChannel):
 
     def fetch_metadata(self, force: bool = False):
         if ((time.time() > self.last_metadata_refresh + 60) # Account for 1 minute max from last refresh
-                or (time.time() > self.time_to_refresh + 5)
-                or self.force_metadata_refresh): # Account for 5s of streaming delay
+                or (time.time() > self.time_to_refresh + 5) # Account for 5s of streaming delay
+                or self.force_metadata_refresh):
             self.force_metadata_refresh = False
             api_url = self.__api_url.format(self.__RF_channel_id)
             response = None
             try:
-                response = requests.get(api_url, timeout=1.0) # 1s timeout # TODO: TIMEOUT seems to hang whole script!
-            except requests.exceptions.RequestException as e:
-                pass # print(f"{time.ctime(time.time())} : Exception : {e}")
+                response = self.metadata_client.get(api_url)
+                if response:
+                    if response.status_code != 200:
+                        print(f"{time.ctime(time.time())} : Error fetching metadata: {response.reason_phrase}")
+                    else:
+                        metadata = response.json()
+                        self.last_metadata_refresh = time.time()
+                        self.time_to_refresh = metadata['now']['endTime']
+                        if not self.time_to_refresh: # Set next refresh at track end time
+                            self.time_to_refresh = time.time()
+                        self.name = metadata['prev'][0]['firstLine'] # metadata['prev'] is a list! # Station name
+                        self.global_program = metadata['prev'][0]['secondLine']  # metadata['prev'] is a list! # Global program name
+                        self.program_name = metadata['now']['firstLine'] # metadata['now'] is a dict!! # Program name
+                        self.track_name = metadata['now']['secondLine'] # Music name or Podcast Title
+                        self.artist_name = metadata['now']['thirdLine'] # Artist name or None
 
-            if response:
-                if not response.ok:
-                    print(f"{time.ctime(time.time())} : Error fetching metadata: {response.reason}")
-                else:
-                    metadata = response.json()
-                    self.last_metadata_refresh = time.time()
-                    self.time_to_refresh = metadata['now']['endTime']
-                    if not self.time_to_refresh: # Set next refresh at track end time
-                        self.time_to_refresh = time.time()
-                    self.name = metadata['prev'][0]['firstLine'] # metadata['prev'] is a list! # Station name
-                    self.global_program = metadata['prev'][0]['secondLine']  # metadata['prev'] is a list! # Global program name
-                    self.program_name = metadata['now']['firstLine'] # metadata['now'] is a dict!! # Program name
-                    self.track_name = metadata['now']['secondLine'] # Music name or Podcast Title
-                    self.artist_name = metadata['now']['thirdLine'] # Artist name or None
-            else:
-                print(f"{time.ctime(time.time())} : Exception getting metadata")
+            except httpx.TimeoutException as e:
+                self.last_metadata_refresh = time.time()
+                self.time_to_refresh = self.last_metadata_refresh # Allow 5s pause before retry
+                print(f"{time.ctime(time.time())} : Exception getting metadata : {e}")
 
     def get_debug(self) -> str:
         return ("Last refresh : " + time.ctime(self.last_metadata_refresh) +
@@ -188,10 +190,10 @@ class RadioFranceChannel(RadioChannel):
 #
 # Generate an array of RadioFrance channels
 #
-def get_radiofrance_channels() -> list[RadioFranceChannel]:
+def get_radiofrance_channels(client : httpx.Client) -> list[RadioFranceChannel]:
     radiofrance_channels = []
     for channel in __default_channels:
-        radiofrance_channels.append(RadioFranceChannel(channel))
+        radiofrance_channels.append(RadioFranceChannel(channel, client))
     return radiofrance_channels
 
 if __name__ == "__main__":
