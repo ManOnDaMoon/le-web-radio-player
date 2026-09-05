@@ -123,7 +123,6 @@ class RadioFranceChannel(RadioChannel):
         self.last_metadata_refresh = 0 # In epoch time
         self.time_to_refresh = 0 # In seconds
         self.force_metadata_refresh = False
-        self.metadata_client = httpx.Client()
 
     def get_channel_type(self):
         return "STREAM"
