@@ -310,7 +310,7 @@ class PiWebRadioApp():
             self.menu[1][0] = "Sleep"
         self.menu_close()
 
-    def menu_set_bluetooth(self, active: bool) -> None:
+    def toggle_bt(self, active: bool) -> None:
         systemd_bus = self.system_bus.get('.systemd1')
         if active:
             systemd_bus.StartUnit('bluetooth.service', 'replace')
@@ -320,6 +320,9 @@ class PiWebRadioApp():
             systemd_bus.StopUnit('bt-agent.service', 'replace')
             systemd_bus.StopUnit('bluetooth.service', 'replace')
         self.show_text("Bluetooth", f"{'ON' if active else 'OFF'}")
+
+    def menu_set_bluetooth(self, active: bool) -> None:
+        self.toggle_bt(active)
         self.menu_close()
 
     # THREAD
@@ -734,7 +737,7 @@ class PiWebRadioApp():
         return battery_status
 
     def api_toggle_bluetooth(self):
-        self.menu_set_bluetooth(not self.bt_active)
+        self.toggle_bt(not self.bt_active)
         result = {
             "btstatus" : f"{'Activé' if not self.bt_active else 'Désactivé'}"
         }
